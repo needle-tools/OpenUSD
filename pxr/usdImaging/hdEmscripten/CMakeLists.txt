@@ -13,6 +13,7 @@ pxr_library(hdEmscripten
       usd
       usdUtils
       sdf
+      -Wl,--whole-archive usdShaders -Wl,--no-whole-archive
 
     PUBLIC_CLASSES
         webRenderDelegate
@@ -38,6 +39,7 @@ add_resources(usdShade)
 add_resources(sdf)
 add_resources(hd)
 add_resources(usdHydra)
+add_resources(usdShaders)
 add_resources(usdRender)
 add_resources(usdVol)
 add_resources(usdImaging)
