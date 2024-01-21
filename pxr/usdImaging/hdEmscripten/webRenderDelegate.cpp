@@ -325,9 +325,12 @@ public:
                 for (auto& node : network.nodes) {
                     val parameters = val::object();
                     for (auto &[parameterName, value] : node.parameters) {
-                    parameters.set(parameterName, value._GetJsVal());
+                        parameters.set(parameterName, value._GetJsVal());
+                        if (value.IsHolding<SdfAssetPath>()) {
+                            SdfAssetPath assetPath = value.Get<SdfAssetPath>();
+                            parameters.set("resolvedPath", assetPath.GetResolvedPath());
+                        }
                     }
-
                     _sPrim.call<val>("updateNode", networkId.GetString(), node.path.GetAsString(), parameters);
                 }
 
