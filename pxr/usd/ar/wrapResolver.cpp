@@ -36,6 +36,7 @@
 #include "pxr/base/tf/refPtr.h"
 
 #include <boost/noncopyable.hpp>
+#include "pxr/usdImaging/hdEmscripten/httpResolver/resolver.h"
 
 using namespace boost::python;
 
@@ -132,4 +133,8 @@ wrapResolver()
 
     def("GetUnderlyingResolver", ArGetUnderlyingResolver,
         return_value_policy<reference_existing_object>());
+
+    class_<HttpResolver, ArResolver, std::shared_ptr<HttpResolver>>("HttpResolver", init<>())
+        .def("SetBaseUrl", &HttpResolver::setBaseUrl)
+        .def("SetBaseTempDir", &HttpResolver::setBaseTempDir);
 }

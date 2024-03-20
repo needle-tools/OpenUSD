@@ -1,5 +1,6 @@
 set(PXR_PREFIX pxr/hdEmscripten)
 set(PXR_PACKAGE hdEmscripten)
+add_subdirectory(httpResolver)
 
 if (NOT PXR_ENABLE_JS_SUPPORT)
     return()
@@ -14,6 +15,7 @@ pxr_library(hdEmscripten
       usdUtils
       sdf
       -Wl,--whole-archive usdShaders -Wl,--no-whole-archive
+      httpResolver
 
     PUBLIC_CLASSES
         webRenderDelegate
@@ -50,6 +52,7 @@ add_resources(usdGeom)
 add_resources(ndr)
 
 list(APPEND RESOURCE_PARAMETERS "--preload-file ${PROJECT_BINARY_DIR}/plugins_plugInfo.json@/usd/plugInfo.json")
+list(APPEND RESOURCE_PARAMETERS "--preload-file httpResolver/plugInfo.json@/usd/httpResolver/resources/plugInfo.json")
 
 set(BUILD_FILES
     ${CMAKE_CURRENT_BINARY_DIR}/${BINDINGS_NAME}.js
@@ -80,7 +83,9 @@ set_target_properties(${BINDINGS_NAME}
     PROPERTIES
         SUFFIX ".js"
 )
-target_link_options(${BINDINGS_NAME} PRIVATE "SHELL:-sEXPORT_NAME=getUsdModule -sMODULARIZE=1 -lembind -sFORCE_FILESYSTEM=1")
+target_link_options(${BINDINGS_NAME} PRIVATE "SHELL:-sEXPORT_NAME=getUsdModule -sMODULARIZE=1 -lembind -sFORCE_FILESYSTEM=1"
+    "SHELL:--preload-file httpResolver/plugInfo.json@/usd/httpResolver/resources/plugInfo.json"
+)
 target_compile_options(${BINDINGS_NAME} PRIVATE "SHELL: -lembind")
 
 install(

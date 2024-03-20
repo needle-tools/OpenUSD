@@ -5,3 +5,6 @@ USD_emscripten/
 build
 .vscode/
 
+build_scripts/__pycache__/google_depot_tools.cpython-39.pyc
+build_scripts/__pycache__/apple_utils.cpython-39.pyc
+*.pyc
