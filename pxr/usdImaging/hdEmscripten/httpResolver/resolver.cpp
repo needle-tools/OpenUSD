@@ -3,7 +3,6 @@
 #include <pxr/usd/ar/defineResolver.h>
 #include <iostream>
 #include <filesystem>
-//#include <curl/curl.h>
 #include <fstream>
 
 // IMPORT LOCAL LIBRARIES
@@ -11,93 +10,102 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+struct FetchUserData {
+    std::string filePath;
+};
+
 AR_DEFINE_RESOLVER(HttpResolver, ArDefaultResolver);
 
-HttpResolver::HttpResolver() : ArDefaultResolver() { 
-    std::cout << "init assetresolver: " << std::endl;
-    //curl_global_init(CURL_GLOBAL_ALL); 
-    }
-HttpResolver::~HttpResolver() { 
-    //curl_global_cleanup(); 
-    }
+HttpResolver::HttpResolver() : ArDefaultResolver() {}
+HttpResolver::~HttpResolver() {}
 
 static size_t WriteCallback(void *contents, size_t size, size_t nmemb, std::string *data) {
     data->append((char*)contents, size * nmemb);
     return size * nmemb;
 }
 
-static std::filesystem::path FetchAndDownloadAsset(const std::string& baseUrl,
+static void downloadSucceeded(emscripten_fetch_t *fetch) {
+    std::cout << "Download succeeded." << std::endl;
+
+    FetchUserData* userData = static_cast<FetchUserData*>(fetch->userData);
+
+    bool verbose = true;
+    if (verbose){
+        std::cout << fetch->data << std::endl;
+    }
+
+    std::filesystem::path dirPath = std::filesystem::path(userData->filePath).parent_path();
+
+    // Attempt to create the directory (and any necessary parent directories)
+    if (std::filesystem::create_directories(dirPath)) {
+        if (verbose){
+            std::cout << "Directories created successfully: " << dirPath << std::endl;
+        }
+    } else {
+        if (verbose){
+            std::cout << "Directories already exist or cannot be created.\n";
+        }
+    }
+
+    std::ofstream outFile(userData->filePath);
+    if (outFile) {
+        outFile << fetch->data;
+        outFile.close();
+        if (verbose){
+            std::cout << "File written successfully." << std::endl;
+        }
+    } else {
+        if (verbose){
+            std::cout << "Failed to open file for writing." << std::endl;
+        }
+    }
+
+    delete userData;
+    emscripten_fetch_close(fetch);
+}
+
+static void downloadFailed(emscripten_fetch_t *fetch) {
+    printf("Downloading %s failed, HTTP failure status code: %d.\n", fetch->url, fetch->status);
+    FetchUserData* userData = static_cast<FetchUserData*>(fetch->userData);
+
+    delete userData;
+    emscripten_fetch_close(fetch);
+}
+
+std::filesystem::path HttpResolver::FetchAndDownloadAsset(const std::string& baseUrl,
                                                    const std::string& baseTempDir,
-                                                   const std::string& relativePath,
-                                                   bool verbose) {
+                                                   const std::string& relativePath) const{
+    FetchUserData* userData = new FetchUserData();
+    userData->filePath = baseTempDir + relativePath;
+    emscripten_fetch_attr_t attr;
+    emscripten_fetch_attr_init(&attr);
+    strcpy(attr.requestMethod, "GET");
+    attr.onsuccess = downloadSucceeded;
+    attr.onerror = downloadFailed;
+    attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY;
+    attr.userData = (void*)userData;
+
+    std::string route = baseUrl + relativePath;
+
+    const char* url = route.c_str();
+
+    if (verbose){
+        std::cout << "Fetching from: " << url << std::endl;
+    }
+
+    emscripten_fetch(&attr, url);
+    // TODO: change this to be an async call to JS?
+    emscripten_sleep(500);
 
     auto filePath = baseTempDir + relativePath;
 
+    // file already saved by now
+
+    std::cout << "baseTempDir: " << baseTempDir << std::endl;
+    std::cout << "relativePath: " << relativePath << std::endl;
 
     return filePath;
 }
-
-// static std::filesystem::path FetchAndDownloadAsset(const std::string& baseUrl,
-//                                                    const std::string& baseTempDir,
-//                                                    const std::string& relativePath,
-//                                                    bool verbose) {
-//     CURL *curl;
-//     CURLcode res;
-//     std::string readBuffer;
-
-//     curl = curl_easy_init();
-//     auto filePath = baseTempDir + relativePath;
-
-
-//     if(curl) {
-//         std::string route = baseUrl + relativePath;
-//         if (verbose){
-//             std::cout << "Fetching from: " << route << std::endl;
-//         }
-//         curl_easy_setopt(curl, CURLOPT_URL, route.c_str());
-//         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-//         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
-
-//         res = curl_easy_perform(curl);
-
-//         std::filesystem::path dirPath = std::filesystem::path(filePath).parent_path();
-
-//         // Attempt to create the directory (and any necessary parent directories)
-//         if (std::filesystem::create_directories(dirPath)) {
-//             if (verbose){
-//                 std::cout << "Directories created successfully: " << dirPath << std::endl;
-//             }
-//         } else {
-//             if (verbose){
-//                 std::cout << "Directories already exist or cannot be created.\n";
-//             }
-//         }
-
-//         if(res != CURLE_OK)
-//             std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
-//         else{
-//             if (verbose){
-//                 std::cout << readBuffer << std::endl;
-//             }
-//             std::ofstream outFile(filePath);
-//             if (outFile) { // Check if the file was successfully opened
-//                 outFile << readBuffer; // Write the string to the file
-//                 outFile.close(); // Close the file
-//                 if (verbose){
-//                     std::cout << "File written successfully." << filePath << std::endl;
-//                 }
-//             } else {
-//                 if (verbose){
-//                     std::cout << "Failed to open file for writing." << std::endl;
-//                 }
-//             }
-//         }
-
-//         curl_easy_cleanup(curl);
-//     }
-
-//     return filePath;
-// }
 
 void HttpResolver::setBaseUrl(const std::string& url) const {
     baseUrl = url;
@@ -139,12 +147,10 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
         setBaseUrl(rootHttpRouteAsPath.generic_string() + "/");
 
         std::filesystem::path tempDir = std::filesystem::temp_directory_path();
-        setBaseTempDir(tempDir.generic_string());
-
+        setBaseTempDir(tempDir.generic_string() + "/");
         savedAssetFilePath = FetchAndDownloadAsset(baseUrl,
                                                    baseTempDir,
-                                                   fullHttpRouteAsPath.filename(),
-                                                   verbose);
+                                                   fullHttpRouteAsPath.filename());
 
         return ArResolvedPath(savedAssetFilePath);
     }
@@ -157,7 +163,7 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
         std::filesystem::path systemPath = stringAssetPathCopy;
         std::filesystem::path relativePath = std::filesystem::relative(systemPath, baseTempDir);
 
-        savedAssetFilePath = FetchAndDownloadAsset(baseUrl, baseTempDir, relativePath, verbose);
+        savedAssetFilePath = FetchAndDownloadAsset(baseUrl, baseTempDir, relativePath);
         if (verbose){
             std::cout << "Assumed to exist now, trying from baseUrl: " << savedAssetFilePath << std::endl;
         }

@@ -83,6 +83,7 @@ public:
         , _geometryPass()
         , _stage()
     {
+        std::cout << "constructor" << std::endl;
         HdRprimCollection collection = HdRprimCollection(
                 HdTokens->geometry,
                 HdReprSelector(HdReprTokens->hull));
@@ -105,6 +106,7 @@ public:
         , _geometryPass()
         , _stage()
     {
+        std::cout << "constructor" << std::endl;
         HdRprimCollection collection = HdRprimCollection(
                 HdTokens->geometry,
                 HdReprSelector(HdReprTokens->hull));
@@ -125,6 +127,7 @@ public:
     }
 
     void Draw() {
+        std::cout << "Draw" << std::endl;
         _delegate->ApplyPendingUpdates();
         HdTaskSharedPtrVector tasks = {
             std::make_shared<WebSyncTask>(_geometryPass, _renderTags)
@@ -133,6 +136,7 @@ public:
     }
 
     void getFile(std::string filename, emscripten::val callback) {
+        std::cout << "_getFile" << std::endl;
         auto& resolver = ArGetResolver();
         ArResolverContextBinder binder(&resolver, _stage->GetPathResolverContext());
 
