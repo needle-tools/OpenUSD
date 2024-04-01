@@ -83,7 +83,6 @@ public:
         , _geometryPass()
         , _stage()
     {
-        std::cout << "constructor" << std::endl;
         HdRprimCollection collection = HdRprimCollection(
                 HdTokens->geometry,
                 HdReprSelector(HdReprTokens->hull));
@@ -106,7 +105,6 @@ public:
         , _geometryPass()
         , _stage()
     {
-        std::cout << "constructor" << std::endl;
         HdRprimCollection collection = HdRprimCollection(
                 HdTokens->geometry,
                 HdReprSelector(HdReprTokens->hull));
@@ -127,7 +125,6 @@ public:
     }
 
     void Draw() {
-        std::cout << "Draw" << std::endl;
         _delegate->ApplyPendingUpdates();
         HdTaskSharedPtrVector tasks = {
             std::make_shared<WebSyncTask>(_geometryPass, _renderTags)
@@ -136,12 +133,10 @@ public:
     }
 
     void getFile(std::string filename, emscripten::val callback) {
-        std::cout << "_getFile" << std::endl;
         auto& resolver = ArGetResolver();
         ArResolverContextBinder binder(&resolver, _stage->GetPathResolverContext());
 
         std::shared_ptr<ArAsset> asset = resolver.OpenAsset(ArResolvedPath(filename));
-
         if (!asset) {
             callback(emscripten::val::undefined());
             return;
@@ -154,7 +149,6 @@ public:
         }
 
         size_t bufferSize = asset->GetSize();
-
         callback(emscripten::val(emscripten::typed_memory_view(bufferSize, buffer.get())));
     }
     void SetTime(double time) {

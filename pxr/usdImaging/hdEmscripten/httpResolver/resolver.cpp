@@ -10,10 +10,6 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-struct FetchUserData {
-    std::string filePath;
-};
-
 AR_DEFINE_RESOLVER(HttpResolver, ArDefaultResolver);
 
 HttpResolver::HttpResolver() : ArDefaultResolver() {}
@@ -24,17 +20,51 @@ static size_t WriteCallback(void *contents, size_t size, size_t nmemb, std::stri
     return size * nmemb;
 }
 
-static void downloadSucceeded(emscripten_fetch_t *fetch) {
-    std::cout << "Download succeeded." << std::endl;
+EM_ASYNC_JS(int, fetch_asset, (const char *route), {
+    const routeString = UTF8ToString(route);
+    try {
+        const response = await fetch(routeString);
+        const assetContent = await response.text();
+        const lengthBytes = lengthBytesUTF8(assetContent) + 1;
+        const ptrToAssetContent = _malloc(lengthBytes);
+        stringToUTF8(assetContent, ptrToAssetContent, lengthBytes);
+        return ptrToAssetContent;
+    }
+    catch(err){
+        out("err: ", err);
+        return 0;
+    }
+});
 
-    FetchUserData* userData = static_cast<FetchUserData*>(fetch->userData);
+std::filesystem::path HttpResolver::FetchAndSaveAsset(const std::string& route,
+                                                   const std::string& baseTempDir,
+                                                   const std::string& relativePath) const {
+    auto filePath = baseTempDir + relativePath;
+    try {
+        int ptrToAssetContent = fetch_asset(route.c_str());
 
-    bool verbose = true;
-    if (verbose){
-        std::cout << fetch->data << std::endl;
+        if (ptrToAssetContent == 0) {
+            std::cerr << "Fetch failed or returned error." << std::endl;
+            return filePath;
+        }
+
+        char *assetContentCString = reinterpret_cast<char *>(ptrToAssetContent);
+        std::string assetContent = std::string(assetContentCString);
+        saveAssetContentToFile(assetContent, filePath);
+
+        // Free the allocated memory for the fetched text
+        free(assetContentCString);
+    }
+    catch (const std::exception& e){
+        std::cout << "Error: " << e.what() << std::endl;
+        return filePath;
     }
 
-    std::filesystem::path dirPath = std::filesystem::path(userData->filePath).parent_path();
+    return filePath;
+}
+
+void HttpResolver::saveAssetContentToFile(const std::string& assetContent, const std::string& filePath) const {
+    std::filesystem::path dirPath = std::filesystem::path(filePath).parent_path();
 
     // Attempt to create the directory (and any necessary parent directories)
     if (std::filesystem::create_directories(dirPath)) {
@@ -47,9 +77,9 @@ static void downloadSucceeded(emscripten_fetch_t *fetch) {
         }
     }
 
-    std::ofstream outFile(userData->filePath);
+    std::ofstream outFile(filePath);
     if (outFile) {
-        outFile << fetch->data;
+        outFile << assetContent;
         outFile.close();
         if (verbose){
             std::cout << "File written successfully." << std::endl;
@@ -59,52 +89,6 @@ static void downloadSucceeded(emscripten_fetch_t *fetch) {
             std::cout << "Failed to open file for writing." << std::endl;
         }
     }
-
-    delete userData;
-    emscripten_fetch_close(fetch);
-}
-
-static void downloadFailed(emscripten_fetch_t *fetch) {
-    printf("Downloading %s failed, HTTP failure status code: %d.\n", fetch->url, fetch->status);
-    FetchUserData* userData = static_cast<FetchUserData*>(fetch->userData);
-
-    delete userData;
-    emscripten_fetch_close(fetch);
-}
-
-std::filesystem::path HttpResolver::FetchAndDownloadAsset(const std::string& baseUrl,
-                                                   const std::string& baseTempDir,
-                                                   const std::string& relativePath) const{
-    FetchUserData* userData = new FetchUserData();
-    userData->filePath = baseTempDir + relativePath;
-    emscripten_fetch_attr_t attr;
-    emscripten_fetch_attr_init(&attr);
-    strcpy(attr.requestMethod, "GET");
-    attr.onsuccess = downloadSucceeded;
-    attr.onerror = downloadFailed;
-    attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY;
-    attr.userData = (void*)userData;
-
-    std::string route = baseUrl + relativePath;
-
-    const char* url = route.c_str();
-
-    if (verbose){
-        std::cout << "Fetching from: " << url << std::endl;
-    }
-
-    emscripten_fetch(&attr, url);
-    // TODO: change this to be an async call to JS?
-    emscripten_sleep(500);
-
-    auto filePath = baseTempDir + relativePath;
-
-    // file already saved by now
-
-    std::cout << "baseTempDir: " << baseTempDir << std::endl;
-    std::cout << "relativePath: " << relativePath << std::endl;
-
-    return filePath;
 }
 
 void HttpResolver::setBaseUrl(const std::string& url) const {
@@ -113,6 +97,32 @@ void HttpResolver::setBaseUrl(const std::string& url) const {
 
 void HttpResolver::setBaseTempDir(const std::string& tempDir) const {
     baseTempDir = tempDir;
+}
+
+std::string combineUrl(const std::string& baseUrl, const std::string& relativePath) {
+    // Step 1: Strip off the scheme
+    auto schemeEnd = baseUrl.find(":/");
+    if (schemeEnd == std::string::npos) {
+        return baseUrl + relativePath;
+    }
+    std::string scheme = baseUrl.substr(0, schemeEnd + 3); // Include "://"
+    std::string basePath = baseUrl.substr(schemeEnd + 3);
+
+    // Extract the domain
+    auto pathStart = basePath.find('/');
+    std::string domain = basePath.substr(0, pathStart);
+    std::string pathOnly = basePath.substr(pathStart); // Path without the domain
+
+    // Step 2: Use filesystem::path for manipulation
+    std::filesystem::path pathObj = pathOnly;
+    pathObj = pathObj.remove_filename(); // Ensure we're manipulating the directory part
+    pathObj /= relativePath; // Append the relative path
+    pathObj = pathObj.lexically_normal(); // Normalize the path (resolve "..", ".", etc.)
+
+    // Step 3: Recombine
+    std::string combinedUrl = scheme + domain + pathObj.string();
+
+    return combinedUrl;
 }
 
 ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
@@ -147,8 +157,11 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
         setBaseUrl(rootHttpRouteAsPath.generic_string() + "/");
 
         std::filesystem::path tempDir = std::filesystem::temp_directory_path();
-        setBaseTempDir(tempDir.generic_string() + "/");
-        savedAssetFilePath = FetchAndDownloadAsset(baseUrl,
+        // This path is chosen because if an asset is found with the path /../../../ it will go up the tmp directory structure
+        // in the case of using /tmp/ then all relative paths greater than depth 1, will look the same. using 6 here is arbitrary,
+        // is there a way to make this always work?
+        setBaseTempDir(tempDir.generic_string() + "/1/1/1/1/1/1/");
+        savedAssetFilePath = FetchAndSaveAsset(assetPath,
                                                    baseTempDir,
                                                    fullHttpRouteAsPath.filename());
 
@@ -161,9 +174,21 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
     }
     else {
         std::filesystem::path systemPath = stringAssetPathCopy;
+        if (verbose){
+            std::cout << "systemPath: " << systemPath << std::endl;
+            std::cout << "baseTempDir: " << baseTempDir << std::endl;
+        }
         std::filesystem::path relativePath = std::filesystem::relative(systemPath, baseTempDir);
+        if (verbose){
+            std::cout << "111111: " << relativePath << std::endl;
+        }
 
-        savedAssetFilePath = FetchAndDownloadAsset(baseUrl, baseTempDir, relativePath);
+        std::string route = combineUrl(baseUrl, relativePath);
+        if (verbose){
+            std::cout << "Relative Path before: " << relativePath << std::endl;
+        }
+
+        savedAssetFilePath = FetchAndSaveAsset(route, baseTempDir, relativePath);
         if (verbose){
             std::cout << "Assumed to exist now, trying from baseUrl: " << savedAssetFilePath << std::endl;
         }

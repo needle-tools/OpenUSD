@@ -16,7 +16,6 @@ pxr_library(hdEmscripten
       sdf
       -Wl,--whole-archive usdShaders -Wl,--no-whole-archive
       httpResolver
-      ndr
 
     PUBLIC_CLASSES
         webRenderDelegate
@@ -26,8 +25,8 @@ pxr_library(hdEmscripten
 )
 
 
-target_link_options(hdEmscripten_internal PRIVATE "SHELL: -sEXPORT_NAME=getUsdModule -sMODULARIZE=1 -lembind -sFORCE_FILESYSTEM=1 -sFETCH=1 -s ASYNCIFY")
-target_compile_options(hdEmscripten_internal PRIVATE "SHELL: -lembind")
+target_link_options(hdEmscripten_internal PRIVATE "SHELL: -sEXPORT_NAME=getUsdModule -sMODULARIZE=1 -lembind -sFORCE_FILESYSTEM=1 -sFETCH=1 -s ASYNCIFY -sPTHREAD_POOL_SIZE=10")
+target_compile_options(hdEmscripten_internal PRIVATE "SHELL: -lembind -pthread")
 
 set(RESOURCE_PARAMETERS "")
 function(add_resources target)
@@ -85,7 +84,7 @@ set_target_properties(${BINDINGS_NAME}
     PROPERTIES
         SUFFIX ".js"
 )
-target_link_options(${BINDINGS_NAME} PRIVATE "SHELL:-sEXPORT_NAME=getUsdModule -sMODULARIZE=1 -lembind -sFORCE_FILESYSTEM=1 -sFETCH=1 -s ASYNCIFY")
+target_link_options(${BINDINGS_NAME} PRIVATE "SHELL:-sEXPORT_NAME=getUsdModule -sMODULARIZE=1 -lembind -sFORCE_FILESYSTEM=1 -sFETCH=1 -s ASYNCIFY -sPTHREAD_POOL_SIZE=10")
 
 install(
     FILES

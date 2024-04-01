@@ -328,7 +328,6 @@ public:
                         parameters.set(parameterName, value._GetJsVal());
                         if (value.IsHolding<SdfAssetPath>()) {
                             SdfAssetPath assetPath = value.Get<SdfAssetPath>();
-                            std::cout << "SETTING RESOLVED PATH: " << assetPath.GetResolvedPath() << std::endl;
                             parameters.set("resolvedPath", assetPath.GetResolvedPath());
                         }
                     }
