@@ -15,45 +15,59 @@ AR_DEFINE_RESOLVER(HttpResolver, ArDefaultResolver);
 HttpResolver::HttpResolver() : ArDefaultResolver() {}
 HttpResolver::~HttpResolver() {}
 
-static size_t WriteCallback(void *contents, size_t size, size_t nmemb, std::string *data) {
-    data->append((char*)contents, size * nmemb);
-    return size * nmemb;
-}
+struct AssetData {
+    int ptrToContent;
+    int length; // Use int for compatibility with JavaScript's setValue; adjust if necessary
+};
 
-EM_ASYNC_JS(int, fetch_asset, (const char *route), {
+EM_ASYNC_JS(void, fetch_asset, (const char* route, int dataPtr), {
     const routeString = UTF8ToString(route);
+    const absoluteUrl = new URL(routeString);
     try {
-        const response = await fetch(routeString);
-        const assetContent = await response.text();
-        const lengthBytes = lengthBytesUTF8(assetContent) + 1;
-        const ptrToAssetContent = _malloc(lengthBytes);
-        stringToUTF8(assetContent, ptrToAssetContent, lengthBytes);
-        return ptrToAssetContent;
-    }
-    catch(err){
-        out("err: ", err);
-        return 0;
+        const response = await fetch(absoluteUrl);
+        if (!response.ok) throw new Error('Fetch failed: ' + response.statusText);
+        const buffer = await response.arrayBuffer();
+        const length = buffer.byteLength;
+        const ptr = _malloc(length);
+        HEAPU8.set(new Uint8Array(buffer), ptr);
+
+        // Correctly set the pointer and length in the AssetData structure
+        // Note: Assumes dataPtr is a pointer to the structure where the first member is an int pointer
+        // to the content, and the second is an int for the length. The layout and alignment in C++
+        // should match this assumption.
+        Module.HEAP32[dataPtr >> 2] = ptr; // Set the pointer
+        Module.HEAP32[(dataPtr >> 2) + 1] = length; // Set the length
+    } catch (err) {
+        console.error("Error in fetch_asset: ", err);
+        Module.HEAP32[dataPtr >> 2] = 0; // Indicate failure with null pointer
+        Module.HEAP32[(dataPtr >> 2) + 1] = 0; // and zero length
     }
 });
 
 std::filesystem::path HttpResolver::FetchAndSaveAsset(const std::string& route,
-                                                   const std::string& baseTempDir,
-                                                   const std::string& relativePath) const {
-    auto filePath = baseTempDir + relativePath;
+                                                   const std::string& filePath) const {
     try {
-        int ptrToAssetContent = fetch_asset(route.c_str());
+        std::filesystem::path dirPath = std::filesystem::path(filePath).parent_path();
 
-        if (ptrToAssetContent == 0) {
-            std::cerr << "Fetch failed or returned error." << std::endl;
-            return filePath;
+        // Attempt to create the directory (and any necessary parent directories)
+        if (std::filesystem::create_directories(dirPath)) {
+            if (verbose){
+                std::cout << "Directories created successfully: " << dirPath << std::endl;
+            }
+        } else {
+            if (verbose){
+                std::cout << "Directories already exist or cannot be created.\n";
+            }
         }
 
-        char *assetContentCString = reinterpret_cast<char *>(ptrToAssetContent);
-        std::string assetContent = std::string(assetContentCString);
-        saveAssetContentToFile(assetContent, filePath);
+        AssetData* data = new AssetData();
+        fetch_asset(route.c_str(), reinterpret_cast<int>(data));
+        char *assetContentCString = reinterpret_cast<char *>(data->ptrToContent);
+        saveBinaryAssetContentToFile(assetContentCString, data->length, filePath);
 
-        // Free the allocated memory for the fetched text
-        free(assetContentCString);
+        free(reinterpret_cast<void*>(data->ptrToContent));
+        delete data;
+
     }
     catch (const std::exception& e){
         std::cout << "Error: " << e.what() << std::endl;
@@ -63,29 +77,18 @@ std::filesystem::path HttpResolver::FetchAndSaveAsset(const std::string& route,
     return filePath;
 }
 
-void HttpResolver::saveAssetContentToFile(const std::string& assetContent, const std::string& filePath) const {
-    std::filesystem::path dirPath = std::filesystem::path(filePath).parent_path();
+void HttpResolver::saveBinaryAssetContentToFile(const char* assetContent, size_t length, const std::string& filePath) const {
 
-    // Attempt to create the directory (and any necessary parent directories)
-    if (std::filesystem::create_directories(dirPath)) {
-        if (verbose){
-            std::cout << "Directories created successfully: " << dirPath << std::endl;
-        }
-    } else {
-        if (verbose){
-            std::cout << "Directories already exist or cannot be created.\n";
-        }
-    }
-
-    std::ofstream outFile(filePath);
+    std::ofstream outFile(filePath, std::ios::out | std::ios::binary);
     if (outFile) {
-        outFile << assetContent;
+        // Write the binary content directly to the file
+        outFile.write(assetContent, length);
         outFile.close();
-        if (verbose){
+        if (verbose) {
             std::cout << "File written successfully." << std::endl;
         }
     } else {
-        if (verbose){
+        if (verbose) {
             std::cout << "Failed to open file for writing." << std::endl;
         }
     }
@@ -97,6 +100,25 @@ void HttpResolver::setBaseUrl(const std::string& url) const {
 
 void HttpResolver::setBaseTempDir(const std::string& tempDir) const {
     baseTempDir = tempDir;
+}
+
+std::string correctURL(const std::string& url) {
+    std::string correctedUrl = url;
+    size_t pos;
+
+    // Correct https:/ to https://
+    pos = correctedUrl.find("https:/");
+    if (pos != std::string::npos && correctedUrl.substr(pos, 7) == "https:/" && (pos + 7 == correctedUrl.size() || correctedUrl[pos + 7] != '/')) {
+        correctedUrl.replace(pos, 6, "https://");
+    }
+
+    // Correct http:/ to http://
+    pos = correctedUrl.find("http:/");
+    if (pos != std::string::npos && correctedUrl.substr(pos, 6) == "http:/" && (pos + 6 == correctedUrl.size() || correctedUrl[pos + 6] != '/')) {
+        correctedUrl.replace(pos, 5, "http://");
+    }
+
+    return correctedUrl;
 }
 
 std::string combineUrl(const std::string& baseUrl, const std::string& relativePath) {
@@ -154,16 +176,22 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
 
         std::filesystem::path fullHttpRouteAsPath = stringAssetPathCopy;
         std::filesystem::path rootHttpRouteAsPath = fullHttpRouteAsPath.parent_path();
-        setBaseUrl(rootHttpRouteAsPath.generic_string() + "/");
+
+        auto finalBaseUrl = rootHttpRouteAsPath.generic_string() + "/";
+        if (verbose){
+            std::cout << "finalBaseUrl: " << finalBaseUrl << std::endl;
+        }
+
+        setBaseUrl(finalBaseUrl);
 
         std::filesystem::path tempDir = std::filesystem::temp_directory_path();
         // This path is chosen because if an asset is found with the path /../../../ it will go up the tmp directory structure
         // in the case of using /tmp/ then all relative paths greater than depth 1, will look the same. using 6 here is arbitrary,
         // is there a way to make this always work?
         setBaseTempDir(tempDir.generic_string() + "/1/1/1/1/1/1/");
+        auto filePath = baseTempDir + fullHttpRouteAsPath.filename().generic_string();
         savedAssetFilePath = FetchAndSaveAsset(assetPath,
-                                                   baseTempDir,
-                                                   fullHttpRouteAsPath.filename());
+                                               filePath);
 
         return ArResolvedPath(savedAssetFilePath);
     }
@@ -179,18 +207,15 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
             std::cout << "baseTempDir: " << baseTempDir << std::endl;
         }
         std::filesystem::path relativePath = std::filesystem::relative(systemPath, baseTempDir);
-        if (verbose){
-            std::cout << "111111: " << relativePath << std::endl;
-        }
 
         std::string route = combineUrl(baseUrl, relativePath);
         if (verbose){
             std::cout << "Relative Path before: " << relativePath << std::endl;
         }
 
-        savedAssetFilePath = FetchAndSaveAsset(route, baseTempDir, relativePath);
+        savedAssetFilePath = FetchAndSaveAsset(route, systemPath);
         if (verbose){
-            std::cout << "Assumed to exist now, trying from baseUrl: " << savedAssetFilePath << std::endl;
+            std::cout << "Assumed to exist now, trying from baseUrl: " << systemPath << std::endl;
         }
     }
 
