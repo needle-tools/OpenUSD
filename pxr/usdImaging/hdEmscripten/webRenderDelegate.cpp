@@ -81,6 +81,49 @@ public:
 
     virtual ~Emscripten_Rprim() = default;
 
+    struct Section {
+        int start;
+        int length;
+        std::string materialId;
+    };
+
+    emscripten::val sectionsToJSArray(const std::vector<Section>& sections) {
+        emscripten::val jsArray = emscripten::val::array();
+        for (const auto& section : sections) {
+            emscripten::val jsObj = emscripten::val::object();
+            jsObj.set("start", section.start);
+            jsObj.set("length", section.length);
+            jsObj.set("materialId", section.materialId);
+            jsArray.call<void>("push", jsObj);
+        }
+        return jsArray;
+    }
+
+    void findContiguousSections(const VtArray<int>& faces, std::string& materialId, std::vector<Section>& sections, const VtArray<int>& faceVertexCounts) {
+        if (faces.empty()) return; // Return early if the input vector is empty
+
+        int currentStart = 0;
+        for (size_t i = 0; i < faces[0]; ++i) {
+            currentStart += (faceVertexCounts[i] - 2) * 3;
+        }
+
+        int currentLength = (faceVertexCounts[0] - 2) * 3;
+
+        for (size_t i = 1; i < faces.size(); ++i) {
+            if (faces[i] == faces[i - 1] + 1) {
+                currentLength += (faceVertexCounts[i] - 2) * 3;
+            } else {
+                sections.push_back({currentStart, currentLength, materialId});
+                currentStart = currentLength;
+                currentLength = (faceVertexCounts[i] - 2) * 3;
+            }
+        }
+
+        sections.push_back({currentStart, currentLength, materialId});
+
+        return;
+    }
+
     virtual void Sync(HdSceneDelegate *delegate,
                       HdRenderParam   *renderParam,
                       HdDirtyBits     *dirtyBits,
@@ -91,11 +134,37 @@ public:
 
         // Materials need to be synced before primvars, to allow the JS side to apply primvar information like
         // displayColor if no other material is set.
+        bool fetchedTopology = false;
         if (*dirtyBits & HdChangeTracker::DirtyMaterialId) {
             auto materialId = delegate->GetMaterialId(id);
-            runInMainThread([&]() {
-                _rPrim.call<void>("setMaterial", materialId.GetAsString());
-            });
+
+            if (materialId.IsEmpty()){
+                int refineLevel = _topology.GetRefineLevel();
+                _topology = HdMeshTopology(delegate->GetMeshTopology(id), refineLevel);
+                fetchedTopology = true;
+
+                auto faceVertexCounts = _topology.GetFaceVertexCounts();
+                auto geomSubsets = _topology.GetGeomSubsets();
+                if (!geomSubsets.empty()){
+                    std::vector<Section> sections;
+                    for (const auto& geomSubset : geomSubsets) {
+                        auto materialID = geomSubset.materialId.GetAsString();
+                        findContiguousSections(geomSubset.indices, materialID, sections, faceVertexCounts);
+                    }
+
+                    if (sections.size() > 0 ) {
+                        runInMainThread([&]() {
+                            emscripten::val jsSections = sectionsToJSArray(sections);
+                            _rPrim.call<void>("setGeomSubsetMaterial", jsSections);
+                        });
+                    }
+                }
+            }
+            else {
+                runInMainThread([&]() {
+                    _rPrim.call<void>("setMaterial", materialId.GetAsString());
+                });
+            }
         }
 
         // Update points
@@ -114,8 +183,11 @@ public:
             // scene delegate, so we save and restore them.
             // TODO: This was copied from the Embree mesh class. We don't actually pull subdiv and refine information, since we're not handling that kind of geometry. We always only create a triangulated mesh.
             PxOsdSubdivTags subdivTags = _topology.GetSubdivTags();
-            int refineLevel = _topology.GetRefineLevel();
-            _topology = HdMeshTopology(delegate->GetMeshTopology(id), refineLevel);
+
+            if (!fetchedTopology){
+                int refineLevel = _topology.GetRefineLevel();
+                _topology = HdMeshTopology(delegate->GetMeshTopology(id), refineLevel);
+            }
             _topology.SetSubdivTags(subdivTags);
 
             // Triangulate the input faces.
@@ -156,7 +228,6 @@ public:
             _computedNormals = Hd_SmoothNormals::ComputeSmoothNormals(
                 &_adjacency, _points.size(), _points.cdata());
             _normalsValid = true;
-
             runInMainThread([&]() {
                 _rPrim.call<void>("updateNormals", val(typed_memory_view(3 * _computedNormals.size(), reinterpret_cast<float*>(_computedNormals.data()))));
             });
