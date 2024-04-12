@@ -44,6 +44,13 @@ EM_ASYNC_JS(void, fetch_asset, (const char* route, int dataPtr), {
     }
 });
 
+EM_JS(void, addToLoadedFiles, (const char* path), {
+    if (typeof loadedFiles === 'undefined'){
+        var loadedFiles = [];
+    }
+    loadedFiles.push(UTF8ToString(path));
+});
+
 std::filesystem::path HttpResolver::FetchAndSaveAsset(const std::string& route,
                                                    const std::string& filePath) const {
     try {
@@ -74,6 +81,7 @@ std::filesystem::path HttpResolver::FetchAndSaveAsset(const std::string& route,
         return filePath;
     }
 
+    addToLoadedFiles(filePath.c_str());
     return filePath;
 }
 
@@ -148,14 +156,17 @@ std::string combineUrl(const std::string& baseUrl, const std::string& relativePa
 }
 
 ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
-
     if (verbose){
         std::cout << "_Resolve: " << assetPath << std::endl;
     }
     std::string stringAssetPathCopy = assetPath;
     std::filesystem::path savedAssetFilePath = assetPath;
-
-    if (assetPath.find("http") != std::string::npos){
+    if (std::filesystem::exists(assetPath)){
+        if (verbose) {
+            std::cout << "Already Exists: " << assetPath << std::endl;
+        }
+    }
+    else if (assetPath.find("http") != std::string::npos){
         std::string githubName = "github.com";
         std::string rawGithubName = "raw.githubusercontent.com";
         std::string blob = "/blob";
@@ -170,15 +181,12 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
             stringAssetPathCopy.erase(pos_blob, blob.length());
         }
 
-        if (verbose){
-            std::cout << "http PATH: " << stringAssetPathCopy << std::endl;
-        }
-
         std::filesystem::path fullHttpRouteAsPath = stringAssetPathCopy;
         std::filesystem::path rootHttpRouteAsPath = fullHttpRouteAsPath.parent_path();
 
         auto finalBaseUrl = rootHttpRouteAsPath.generic_string() + "/";
         if (verbose){
+            std::cout << "http PATH: " << stringAssetPathCopy << std::endl;
             std::cout << "finalBaseUrl: " << finalBaseUrl << std::endl;
         }
 
@@ -192,20 +200,9 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
         auto filePath = baseTempDir + fullHttpRouteAsPath.filename().generic_string();
         savedAssetFilePath = FetchAndSaveAsset(assetPath,
                                                filePath);
-
-        return ArResolvedPath(savedAssetFilePath);
     }
-    else if (std::filesystem::exists(assetPath)){
-        if (verbose) {
-            std::cout << "Already Exists: " << assetPath << std::endl;
-        }
-    }
-    else {
+    else if (!baseUrl.empty()){
         std::filesystem::path systemPath = stringAssetPathCopy;
-        if (verbose){
-            std::cout << "systemPath: " << systemPath << std::endl;
-            std::cout << "baseTempDir: " << baseTempDir << std::endl;
-        }
         std::filesystem::path relativePath = std::filesystem::relative(systemPath, baseTempDir);
 
         std::string route = combineUrl(baseUrl, relativePath);
@@ -217,6 +214,13 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
         if (verbose){
             std::cout << "Assumed to exist now, trying from baseUrl: " << systemPath << std::endl;
         }
+    }
+    else {
+        return ArDefaultResolver::_Resolve(assetPath);
+    }
+
+    if (verbose){
+        std::cout << "ENDDD_Resolve: " << savedAssetFilePath << std::endl;
     }
 
     return ArResolvedPath(savedAssetFilePath);

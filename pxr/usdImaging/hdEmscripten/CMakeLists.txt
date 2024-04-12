@@ -25,7 +25,7 @@ pxr_library(hdEmscripten
 )
 
 
-target_link_options(hdEmscripten_internal PRIVATE "SHELL: -sEXPORT_NAME=getUsdModule -sMODULARIZE=1 -lembind -sFORCE_FILESYSTEM=1 -sFETCH=1 -s ASYNCIFY -sPTHREAD_POOL_SIZE=10 -g")
+target_link_options(hdEmscripten_internal PRIVATE "SHELL: -sEXPORT_NAME=getUsdModule -sMODULARIZE=1 -lembind -sFORCE_FILESYSTEM=1 -sFETCH=1 -sASYNCIFY -sPTHREAD_POOL_SIZE=10 -g")
 target_compile_options(hdEmscripten_internal PRIVATE "SHELL: -lembind -pthread")
 
 set(RESOURCE_PARAMETERS "")
@@ -84,7 +84,7 @@ set_target_properties(${BINDINGS_NAME}
     PROPERTIES
         SUFFIX ".js"
 )
-target_link_options(${BINDINGS_NAME} PRIVATE "SHELL:-sEXPORT_NAME=getUsdModule -sMODULARIZE=1 -lembind -sFORCE_FILESYSTEM=1 -sFETCH=1 -s ASYNCIFY -sPTHREAD_POOL_SIZE=10 -g")
+target_link_options(${BINDINGS_NAME} PRIVATE "SHELL:-sEXPORT_NAME=getUsdModule -sMODULARIZE=1 -lembind -sFORCE_FILESYSTEM=1 -sFETCH=1 -sASYNCIFY -sPTHREAD_POOL_SIZE=10 -g")
 
 install(
     FILES

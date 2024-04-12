@@ -4,6 +4,7 @@
 #include <pxr/usd/ar/defaultResolver.h>
 #include <pxr/usd/ar/defineResolver.h>
 #include <emscripten/fetch.h>
+#include <emscripten.h>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
