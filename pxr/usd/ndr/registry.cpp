@@ -898,16 +898,13 @@ NdrRegistry::_FindAndInstantiateDiscoveryPlugins()
     if (TfGetEnvSetting(PXR_NDR_SKIP_DISCOVERY_PLUGIN_DISCOVERY)) {
         return;
     }
-
     // Find all of the available discovery plugins
     std::set<TfType> discoveryPluginTypes;
     PlugRegistry::GetInstance().GetAllDerivedTypes<NdrDiscoveryPlugin>(
         &discoveryPluginTypes);
-
     // Allow plugins to be disabled.
     const std::string disabledPluginsStr = TfGetEnvSetting(PXR_NDR_DISABLE_PLUGINS);
     const std::set<std::string> disabledPlugins = TfStringTokenizeToSet(disabledPluginsStr, ",");
-
     // Instantiate any discovery plugins that were found
     for (const TfType& discoveryPluginType : discoveryPluginTypes) {
         const std::string& pluginName = discoveryPluginType.GetTypeName();
@@ -921,10 +918,8 @@ NdrRegistry::_FindAndInstantiateDiscoveryPlugins()
         TF_DEBUG(NDR_DISCOVERY).Msg(
             "Found NdrDiscoveryPlugin '%s'\n", 
             discoveryPluginType.GetTypeName().c_str());
-
         NdrDiscoveryPluginFactoryBase* pluginFactory =
             discoveryPluginType.GetFactory<NdrDiscoveryPluginFactoryBase>();
-
         if (TF_VERIFY(pluginFactory)) {
             _discoveryPlugins.emplace_back(pluginFactory->New());
         }

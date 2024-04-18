@@ -15,6 +15,7 @@ pxr_library(hdEmscripten
       usdUtils
       sdf
       -Wl,--whole-archive usdShaders -Wl,--no-whole-archive
+      -Wl,--whole-archive usdSkel -Wl,--no-whole-archive
       httpResolver
 
     PUBLIC_CLASSES
@@ -25,7 +26,7 @@ pxr_library(hdEmscripten
 )
 
 
-target_link_options(hdEmscripten_internal PRIVATE "SHELL: -sEXPORT_NAME=getUsdModule -sMODULARIZE=1 -lembind -sFORCE_FILESYSTEM=1 -sFETCH=1 -sASYNCIFY -sPTHREAD_POOL_SIZE=10 -g")
+target_link_options(hdEmscripten_internal PRIVATE "SHELL: -Oz -g0 -sEXPORT_NAME=getUsdModule -sMODULARIZE=1 -lembind -sFORCE_FILESYSTEM=1 -sFETCH=1 -sASYNCIFY -sUSE_PTHREADS=1 -sPTHREAD_POOL_SIZE=10")
 target_compile_options(hdEmscripten_internal PRIVATE "SHELL: -lembind -pthread")
 
 set(RESOURCE_PARAMETERS "")
@@ -49,6 +50,7 @@ add_resources(usd)
 add_resources(usdLux)
 add_resources(ar)
 add_resources(usdGeom)
+add_resources(usdSkel)
 add_resources(ndr)
 add_resources(httpResolver)
 
@@ -84,7 +86,7 @@ set_target_properties(${BINDINGS_NAME}
     PROPERTIES
         SUFFIX ".js"
 )
-target_link_options(${BINDINGS_NAME} PRIVATE "SHELL:-sEXPORT_NAME=getUsdModule -sMODULARIZE=1 -lembind -sFORCE_FILESYSTEM=1 -sFETCH=1 -sASYNCIFY -sPTHREAD_POOL_SIZE=10 -g")
+target_link_options(${BINDINGS_NAME} PRIVATE "SHELL: -Oz -g0 -sEXPORT_NAME=getUsdModule -sMODULARIZE=1 -lembind -sFORCE_FILESYSTEM=1 -sASYNCIFY -sUSE_PTHREADS=1 -sPTHREAD_POOL_SIZE=10")
 
 install(
     FILES
