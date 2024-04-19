@@ -14,7 +14,7 @@ public:
     ~HttpResolver();
 
     ArResolvedPath _Resolve(const std::string& path) const override;
-    std::shared_ptr<ArAsset> _OpenAsset(const pxrInternal_v0_23__pxrReserved__::ArResolvedPath &resolvedPath) const override;
+    std::shared_ptr<ArAsset> _OpenAsset(const ArResolvedPath &resolvedPath) const override;
     ArResolvedPath _ResolveForNewAsset(const std::string &assetPath) const override;
     std::filesystem::path FetchAndSaveAsset(const std::string& baseUrl, const std::string& filePath) const;
     void saveBinaryAssetContentToFile(const char* assetContent, size_t length, const std::string& filePath) const;
