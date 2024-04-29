@@ -86,7 +86,7 @@ set_target_properties(${BINDINGS_NAME}
     PROPERTIES
         SUFFIX ".js"
 )
-target_link_options(${BINDINGS_NAME} PRIVATE "SHELL: -s ASSERTIONS=1 -s EXPORT_NAME='getUsdModule' \
+target_link_options(${BINDINGS_NAME} PRIVATE "SHELL: -s EXPORT_NAME='getUsdModule' \
     -s MODULARIZE=1 -lembind -s PTHREAD_POOL_SIZE=10 -s ASYNCIFY -s 'ASYNCIFY_IMPORTS=[\"fetch_asset\"]'")
 install(
     FILES

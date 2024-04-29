@@ -45,10 +45,16 @@ EM_ASYNC_JS(void, fetch_asset, (const char* route, int dataPtr), {
 });
 
 EM_JS(void, addToLoadedFiles, (const char* path), {
-    if (typeof loadedFiles === 'undefined'){
-        var loadedFiles = [];
+    if (typeof self !== 'undefined') {
+        // Safe to use self here
+        if (typeof self.loadedFiles === 'undefined') {
+            self.loadedFiles = [];
+        }
+    } else {
+    // Handle case where neither window nor self are available
+        console.log('Neither window nor self is defined');
     }
-    loadedFiles.push(UTF8ToString(path));
+    self.loadedFiles.push(UTF8ToString(path));
 });
 
 std::filesystem::path HttpResolver::FetchAndSaveAsset(const std::string& route,
