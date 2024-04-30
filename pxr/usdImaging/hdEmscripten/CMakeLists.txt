@@ -87,7 +87,8 @@ set_target_properties(${BINDINGS_NAME}
         SUFFIX ".js"
 )
 target_link_options(${BINDINGS_NAME} PRIVATE "SHELL: -s EXPORT_NAME='getUsdModule' \
-    -s MODULARIZE=1 -lembind -s PTHREAD_POOL_SIZE=10 -s ASYNCIFY -s 'ASYNCIFY_IMPORTS=[\"fetch_asset\"]'")
+    -s MODULARIZE=1 -lembind -s PTHREAD_POOL_SIZE=10 -s ASYNCIFY -s 'ASYNCIFY_IMPORTS=[\"fetch_asset\"]' \
+    -sIMPORTED_MEMORY=1 --pre-js ${CMAKE_CURRENT_SOURCE_DIR}/js/MemoryConfiguration.js")
 install(
     FILES
     ${BUILD_FILES}
