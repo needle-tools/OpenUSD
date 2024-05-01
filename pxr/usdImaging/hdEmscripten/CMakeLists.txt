@@ -15,7 +15,7 @@ pxr_library(hdEmscripten
       usdUtils
       sdf
       -Wl,--whole-archive usdShaders -Wl,--no-whole-archive
-      -Wl,--whole-archive usdSkel -Wl,--no-whole-archive
+        -Wl,--whole-archive usdSkel -Wl,--no-whole-archive
       httpResolver
 
     PUBLIC_CLASSES
@@ -26,7 +26,7 @@ pxr_library(hdEmscripten
 )
 
 
-target_link_options(hdEmscripten_internal PRIVATE "SHELL: -Os -g0 -sEXPORT_NAME=getUsdModule -sMODULARIZE=1 -lembind -sFORCE_FILESYSTEM=1 -sFETCH=1 -sASYNCIFY -sUSE_PTHREADS=1 -sPTHREAD_POOL_SIZE=10")
+target_link_options(hdEmscripten_internal PRIVATE "SHELL: -Oz")
 target_compile_options(hdEmscripten_internal PRIVATE "SHELL: -lembind -pthread")
 
 set(RESOURCE_PARAMETERS "")
@@ -86,9 +86,10 @@ set_target_properties(${BINDINGS_NAME}
     PROPERTIES
         SUFFIX ".js"
 )
-target_link_options(${BINDINGS_NAME} PRIVATE "SHELL: -s EXPORT_NAME='getUsdModule' \
-    -s MODULARIZE=1 -lembind -s PTHREAD_POOL_SIZE=10 -s ASYNCIFY -s 'ASYNCIFY_IMPORTS=[\"fetch_asset\"]' \
-    -sIMPORTED_MEMORY=1 --pre-js ${CMAKE_CURRENT_SOURCE_DIR}/js/MemoryConfiguration.js")
+target_link_options(${BINDINGS_NAME} PRIVATE "SHELL: -Oz -s EXPORT_NAME='getUsdModule' \
+    -s MODULARIZE=1 -lembind -s PTHREAD_POOL_SIZE=10 -s ASYNCIFY -s ASYNCIFY_ADVISE \
+    -sIMPORTED_MEMORY=1 --pre-js ${CMAKE_CURRENT_SOURCE_DIR}/js/MemoryConfiguration.js  \
+    -s ASYNCIFY_REMOVE=['__vfprintf_internal','__fseeko_unlocked','*::itanium_demangle::*','*VtArray*','*_Clear*','*dlfree*','*TfType*','*Tf_Registry*','*TfRefPtr*','*::__shared_weak_count::*','*Sdf_VariableExpressionImpl::*','*Tf_Post*','*tao::PXR_INTERNAL_NS_pegtl*','*UsdObject*','*TfSmallVector*','*TfMallocTag*','*__cxa_guard_acquire*,'*UsdSchema*','*Usd_CrateFile*','*TfEnum*','*TfErrorMark*']")
 install(
     FILES
     ${BUILD_FILES}
