@@ -20,6 +20,7 @@
 #include "webRenderDelegate.h"
 #include "pxr/imaging/hd/unitTestNullRenderPass.h"
 #include <emscripten/bind.h>
+#include "pxr/usd/usdSkel/bakeSkinning.h"
 
 #include <memory>
 #include <string>
@@ -193,6 +194,9 @@ private:
         _delegate = new UsdImagingDelegate(_renderIndex, delegateId);
 
         _stage = usdStage;
+
+        UsdSkelBakeSkinning(_stage->Traverse());
+        _stage->Save();
         _delegate->Populate(_stage->GetPseudoRoot());
 
         _geometryPass = HdRenderPassSharedPtr(
