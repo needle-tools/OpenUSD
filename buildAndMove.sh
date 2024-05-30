@@ -15,10 +15,12 @@ python3 "$python_script" --build-target wasm "$target_directory"
 # Check if the Python script executed successfully
 if [ $? -eq 0 ]; then
 
+    wasm-opt -Oz -o "$target_directory/bin/output.wasm" "$target_directory/bin/emHdBindings.wasm" --enable-bulk-memory --enable-threads
+
     # Copy the desired files from the target directory to the destination directory
     cp "$target_directory/bin/emHdBindings.data" "$destination_directory"
     cp "$target_directory/bin/emHdBindings.js" "$destination_directory"
-    cp "$target_directory/bin/emHdBindings.wasm" "$destination_directory"
+    cp "$target_directory/bin/output.wasm" "$destination_directory/emHdBindings.wasm"
     cp "$target_directory/bin/emHdBindings.worker.js" "$destination_directory"
 
     say ready
