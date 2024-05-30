@@ -321,11 +321,6 @@ private:
                             primVarNum < numPrimVars;
                         ++primVarNum) {
                     HdPrimvarDescriptor const &primvar = primvars[primVarNum];
-                    std::string toFind = "skel:";
-                    std::string primVarName = primvar.name.GetText();
-                    if (primVarName.find(toFind) != std::string::npos) {
-                        _rPrim.call<void>("skelDetected", id.GetAsString(), primVarName);
-                    }
                     if (HdChangeTracker::IsPrimvarDirty(dirtyBits,
                                                         id,
                                                         primvar.name)) {
