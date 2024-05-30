@@ -6422,7 +6422,9 @@ void textFileFormatYyerror(Sdf_TextParserContext *context, const char *msg)
     if (!context->fileContext.empty()) {
         s += " in file " + context->fileContext;
     }
+#ifndef __EMSCRIPTEN__
     s += "\n";
+#endif
 
     // Return the line number in the error info.
     TfDiagnosticInfo info(errLineNumber);

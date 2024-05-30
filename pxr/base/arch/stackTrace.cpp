@@ -71,6 +71,7 @@
 #include <cstring>
 #include <mutex>
 #include <thread>
+#include <emscripten.h>
 
 /* Darwin/ppc did not do stack traces.  Darwin/i386 still 
    needs some work, this has been stubbed out for now.  */
@@ -1046,8 +1047,13 @@ _ArchLogProcessStateHelper(bool isFatal,
         _exit(0);
     }
 
-    /* Could use tmpnam but we're trying to be minimalist here. */
+/* Could use tmpnam but we're trying to be minimalist here. */
     char logfile[1024];
+#ifdef __EMSCRIPTEN__
+    // In WebAssembly environment, we're already loggign all exceptions so do nothing here?
+
+    // Skip hostname retrieval and file-based logging
+#else
     if (_GetStackTraceName(logfile, sizeof(logfile)) == -1) {
         // Cannot create the logfile.
         static const char msg[] = "Cannot create a log file\n";
@@ -1075,7 +1081,6 @@ _ArchLogProcessStateHelper(bool isFatal,
         fputs("\nPostmortem Stack Trace\n", stackFd);
         fclose(stackFd);
     }
-
     /* get hostname for printing out in the error message only */
     char hostname[MAXHOSTNAMELEN];
     if (gethostname(hostname,MAXHOSTNAMELEN) != 0) {
@@ -1144,7 +1149,7 @@ _ArchLogProcessStateHelper(bool isFatal,
         _FinishLoggingFatalStackTrace(progname, logfile, NULL /*session log*/, 
                                       true /* crashing hard? */);
     }
-
+#endif
     busy.clear(std::memory_order_release);
 }
 
