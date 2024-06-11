@@ -176,6 +176,15 @@ UsdImagingIndexProxy::AddDependency(SdfPath const& cachePath,
         usdPath.GetText(), cachePath.GetText());
 }
 
+bool IsVisible(const UsdPrim& prim) {
+    if (prim.IsA<UsdGeomImageable>()) {
+        UsdGeomImageable imageable(prim);
+        TfToken visibility = imageable.ComputeVisibility();
+        return visibility != UsdGeomTokens->invisible;
+    }
+    return true;
+}
+
 void
 UsdImagingIndexProxy::InsertRprim(
                              TfToken const& primType,
@@ -189,19 +198,23 @@ UsdImagingIndexProxy::InsertRprim(
     if (primInfo) {
         HdRenderIndex &renderIndex = _delegate->GetRenderIndex();
         SdfPath indexPath = _delegate->ConvertCachePathToIndexPath(cachePath);
-        renderIndex.InsertRprim(primType, _delegate, indexPath);
 
-        // NOTE: Starting from AllDirty doesn't necessarily match what the
-        //       render delegate's concrete implementation of a given Rprim
-        //       might return but will be fully inclusive of it. Not querying it
-        //       directly from the change tracker immediately provides
-        //       flexibility as to when insertions will be processed. This is
-        //       relevant to downstream consumption patterns when emulated via
-        //       a scene index.
-        primInfo->dirtyBits = HdChangeTracker::AllDirty;
-        _delegate->_dirtyCachePaths.insert(cachePath);
+        if (IsVisible(usdPrim)){
+            renderIndex.InsertRprim(primType, _delegate, indexPath);
 
-        _AddTask(cachePath);
+            // NOTE: Starting from AllDirty doesn't necessarily match what the
+            //       render delegate's concrete implementation of a given Rprim
+            //       might return but will be fully inclusive of it. Not querying it
+            //       directly from the change tracker immediately provides
+            //       flexibility as to when insertions will be processed. This is
+            //       relevant to downstream consumption patterns when emulated via
+            //       a scene index.
+            primInfo->dirtyBits = HdChangeTracker::AllDirty;
+            _delegate->_dirtyCachePaths.insert(cachePath);
+
+            _AddTask(cachePath);
+        }
+
     }
 }
 
