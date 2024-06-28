@@ -1,0 +1,10 @@
+diff --git a/usd-wasm/src/bindings/emHdBindings.js b/usd-wasm/src/bindings/emHdBindings.js
+--- a/usd-wasm/src/bindings/emHdBindings.js
++++ b/usd-wasm/src/bindings/emHdBindings.js
+@@ -11960,6 +11960,4 @@
+     Module["FS_unlink"] = FS.unlink;
+     Module["PThread"] = PThread;
+-    Module["FS_readdir"]=FS.readdir;
+-    Module["FS_analyzePath"]=FS.analyzePath;
+     var calledRun;
+     dependenciesFulfilled = function runCaller() {

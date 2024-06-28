@@ -2,12 +2,12 @@
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 [--mode debug|release --build-dir <dir> --destination-dir <dir>]"
+    echo "Usage: $0 [--mode debug|release --build-dir <dir> --destination-dir <dir> --patch-dir <dir>]"
     exit 1
 }
 
 # Check for the mode argument
-if [ "$#" -ne 6 ]; then
+if [ "$#" -ne 8 ]; then
   echo "$#"
   usage
 fi
@@ -15,6 +15,7 @@ fi
 mode=$2
 build_dir=$4
 destination_directory=$6
+patch_dir=$8
 
 # Validate the mode argument
 if [ "$mode" != "debug" ] && [ "$mode" != "release" ]; then
@@ -30,6 +31,14 @@ fi
 # Check if the Python script executed successfully
 if [ $? -eq 0 ]; then
 
+  prettier --write "$build_dir/bin/emHdBindings.js"
+
+  patch "$build_dir/bin/emHdBindings.js" < "$patch_dir/arguments_1.patch"
+  patch "$build_dir/bin/emHdBindings.js" -R < "$patch_dir/arguments_2.patch"
+  patch "$build_dir/bin/emHdBindings.js" < "$patch_dir/abort.patch"
+  patch "$build_dir/bin/emHdBindings.js" -R < "$patch_dir/fileSystem.patch"
+  echo -e '\nglobalThis["NEEDLE:USD:GET"] = getUsdModule;' >> "$build_dir/bin/emHdBindings.js"
+
   if [ "$mode" != "release" ]; then
       cp "$build_dir/bin/emHdBindings.wasm" "$destination_directory/emHdBindings.wasm"
   else
@@ -39,15 +48,6 @@ if [ $? -eq 0 ]; then
   cp "$build_dir/bin/emHdBindings.data" "$destination_directory"
   cp "$build_dir/bin/emHdBindings.js" "$destination_directory/emHdBindings.js"
   cp "$build_dir/bin/emHdBindings.worker.js" "$destination_directory"
-
-  prettier --write "$destination_directory/emHdBindings.js"
-
-  patch "$destination_directory/emHdBindings.js" < "$destination_directory/patches/arguments_1.patch"
-  # TODO: fix this
-  # patch "$destination_directory/emHdBindings.js" < "$destination_directory/patches/arguments_2.patch"
-  patch "$destination_directory/emHdBindings.js" < "$destination_directory/patches/abort.patch"
-  # TODO: fix this
-  # patch "$destination_directory/emHdBindings.js" < "$destination_directory/patches/fileSystem.patch"
 
   say ready
 else
