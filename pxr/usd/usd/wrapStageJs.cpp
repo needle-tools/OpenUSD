@@ -97,7 +97,8 @@ char GetUpAxis(pxr::UsdStage& self)
     pxr::UsdStageWeakPtr stageWeakPtr(stageRefPtr);
 
     // Use the weak pointer to get the stage up axis
-    return pxr::UsdGeomGetStageUpAxis(stageWeakPtr) == pxr::UsdGeomTokens->z ? 'z' : 'y';
+    auto upAxisToken = pxr::UsdGeomGetStageUpAxis(stageWeakPtr);
+    return upAxisToken == pxr::UsdGeomTokens->y ? 'y' : upAxisToken == pxr::UsdGeomTokens->z ? 'z' : 'x';
 }
 
 void MyExit()
