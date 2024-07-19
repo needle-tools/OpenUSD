@@ -36,7 +36,7 @@ if [ $? -eq 0 ]; then
   patch "$build_dir/bin/emHdBindings.js" < "$patch_dir/arguments_1.patch"
   patch "$build_dir/bin/emHdBindings.js" -R < "$patch_dir/arguments_2.patch"
   patch "$build_dir/bin/emHdBindings.js" < "$patch_dir/abort.patch"
-  patch "$build_dir/bin/emHdBindings.js" -R < "$patch_dir/fileSystem.patch"
+  patch "$build_dir/bin/emHdBindings.js" < "$patch_dir/fileSystem.patch"
   echo -e '\nglobalThis["NEEDLE:USD:GET"] = getUsdModule;' >> "$build_dir/bin/emHdBindings.js"
 
   if [ "$mode" != "release" ]; then
