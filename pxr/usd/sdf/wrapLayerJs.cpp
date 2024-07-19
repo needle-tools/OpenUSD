@@ -168,6 +168,7 @@ EMSCRIPTEN_BINDINGS(SdfLayer) {
     .function("ExportToString", &ExportToString)
     .function("GetDisplayName", &pxr::SdfLayer::GetDisplayName)
     .function("GetPrimAtPath", &pxr::SdfLayer::GetPrimAtPath)
+    .function("GetDefaultPrim", &pxr::SdfLayer::GetDefaultPrim)
     .function("GetPropertyAtPath", /*&pxr::SdfLayer::GetPropertyAtPath*/ &_GetPropertyAtPath, allow_raw_pointer<ret_val>())
     .function("SetTimeSample", &_SetTimeSample)
     .function("Traverse", &traverse)
