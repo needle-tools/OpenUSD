@@ -26,6 +26,8 @@
 #include "pxr/usd/sdf/wrapPathJs.h"
 #include "pxr/base/tf/wrapTokenJs.h"
 #include "pxr/usd/usd/emscriptenPtrRegistrationHelper.h"
+#include "pxr/usd/usdGeom/metrics.h"
+#include "pxr/usd/usdGeom/tokens.h"
 #include <functional>
 
 #include <iostream>
@@ -86,6 +88,19 @@ void Export(pxr::UsdStage& self, const std::string &fileName, bool addFileFormat
     self.Export(fileName, addFileFormatComments, arguments);
 }
 
+char GetUpAxis(pxr::UsdStage& self)
+{
+    // Convert the UsdStage& to a UsdStageRefPtr
+    pxr::UsdStageRefPtr stageRefPtr(&self);
+
+    // Convert the UsdStageRefPtr to a UsdStageWeakPtr
+    pxr::UsdStageWeakPtr stageWeakPtr(stageRefPtr);
+
+    // Use the weak pointer to get the stage up axis
+    auto upAxisToken = pxr::UsdGeomGetStageUpAxis(stageWeakPtr);
+    return upAxisToken == pxr::UsdGeomTokens->y ? 'y' : upAxisToken == pxr::UsdGeomTokens->z ? 'z' : 'x';
+}
+
 void MyExit()
 {
     emscripten_force_exit(0);
@@ -109,12 +124,12 @@ EMSCRIPTEN_BINDINGS(UsdStage) {
 
     .class_function("Open", &Open)
     .class_function("Open", select_overload<pxr::UsdStageRefPtr(const pxr::SdfLayerHandle &layer, pxr::UsdStage::InitialLoadSet)>(&pxr::UsdStage::Open))
-
     .class_function("Exit", &MyExit)
     .function("ExportToString", &exportToString<pxr::UsdStage>)
     .function("DefinePrim", &pxr::UsdStage::DefinePrim)
     .function("Download", &download)
     .function("Export", &Export)
+    .function("GetUpAxis", &GetUpAxis)
     .function("GetPrimAtPath", &pxr::UsdStage::GetPrimAtPath)
     .function("SetDefaultPrim", &pxr::UsdStage::SetDefaultPrim)
     .function("OverridePrim", &pxr::UsdStage::OverridePrim)
