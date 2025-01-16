@@ -26,6 +26,8 @@
 #include "pxr/usd/sdf/wrapPathJs.h"
 #include "pxr/base/tf/wrapTokenJs.h"
 #include "pxr/usd/usd/emscriptenPtrRegistrationHelper.h"
+#include "pxr/usd/usdGeom/metrics.h"
+#include "pxr/usd/usdGeom/tokens.h"
 #include <functional>
 
 #include <iostream>
@@ -39,17 +41,17 @@ EMSCRIPTEN_REGISTER_SMART_PTR(SdfLayer)
 EMSCRIPTEN_ENABLE_WEAK_PTR_CAST(SdfLayer)
 
 EM_JS(void, downloadJS, (const char *data, const char *filenamedata), {
-  const text = UTF8ToString(data);
-  const filename = UTF8ToString(filenamedata);
+const text = UTF8ToString(data);
+const filename = UTF8ToString(filenamedata);
 
-  let element = document.createElement('a');
-  element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
-  element.setAttribute('download', filename);
-  element.style.display = 'none';
-  document.body.appendChild(element);
-  element.click();
+let element = document.createElement('a');
+element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+element.setAttribute('download', filename);
+element.style.display = 'none';
+document.body.appendChild(element);
+element.click();
 
-  document.body.removeChild(element);
+document.body.removeChild(element);
 });
 
 template<typename T>
@@ -77,7 +79,7 @@ pxr::UsdStageRefPtr Open(const val& value)
         return pxr::UsdStage::Open(value.as<std::string>());
     } else {
         return pxr::UsdStage::Open(value.as<pxr::SdfLayerHandle>());
-    }   
+    }
 }
 
 void Export(pxr::UsdStage& self, const std::string &fileName, bool addFileFormatComments)
@@ -86,42 +88,55 @@ void Export(pxr::UsdStage& self, const std::string &fileName, bool addFileFormat
     self.Export(fileName, addFileFormatComments, arguments);
 }
 
+char GetUpAxis(pxr::UsdStage& self)
+{
+    // Convert the UsdStage& to a UsdStageRefPtr
+    pxr::UsdStageRefPtr stageRefPtr(&self);
+
+    // Convert the UsdStageRefPtr to a UsdStageWeakPtr
+    pxr::UsdStageWeakPtr stageWeakPtr(stageRefPtr);
+
+    // Use the weak pointer to get the stage up axis
+    auto upAxisToken = pxr::UsdGeomGetStageUpAxis(stageWeakPtr);
+    return upAxisToken == pxr::UsdGeomTokens->y ? 'y' : upAxisToken == pxr::UsdGeomTokens->z ? 'z' : 'x';
+}
+
 void MyExit()
 {
     emscripten_force_exit(0);
 }
 
 EMSCRIPTEN_BINDINGS(UsdStage) {
-    register_vector<float>("VectorFloat");
-    register_vector<pxr::SdfLayerHandle>("VectorSdfLayerHandle");
+        register_vector<float>("VectorFloat");
+        register_vector<pxr::SdfLayerHandle>("VectorSdfLayerHandle");
 
-    enum_<pxr::UsdStage::InitialLoadSet>("InitialLoadSet")
+        enum_<pxr::UsdStage::InitialLoadSet>("InitialLoadSet")
         .value("LoadAll", pxr::UsdStage::InitialLoadSet::LoadAll)
         .value("LoadNone", pxr::UsdStage::InitialLoadSet::LoadNone)
         ;
 
-  using namespace std::placeholders;
+        using namespace std::placeholders;
 
-  class_<pxr::UsdStage>("UsdStage")
-    .smart_ptr_constructor("UsdStageRefPtr", &CreateNew)
-    .class_function("CreateNew", &CreateNew)
-    .class_function("CreateNew", select_overload<pxr::UsdStageRefPtr(const std::string&, pxr::UsdStage::InitialLoadSet load)>(&pxr::UsdStage::CreateNew))
+        class_<pxr::UsdStage>("UsdStage")
+        .smart_ptr_constructor("UsdStageRefPtr", &CreateNew)
+        .class_function("CreateNew", &CreateNew)
+        .class_function("CreateNew", select_overload<pxr::UsdStageRefPtr(const std::string&, pxr::UsdStage::InitialLoadSet load)>(&pxr::UsdStage::CreateNew))
 
-    .class_function("Open", &Open)
-    .class_function("Open", select_overload<pxr::UsdStageRefPtr(const pxr::SdfLayerHandle &layer, pxr::UsdStage::InitialLoadSet)>(&pxr::UsdStage::Open))
-
-    .class_function("Exit", &MyExit)
-    .function("ExportToString", &exportToString<pxr::UsdStage>)
-    .function("DefinePrim", &pxr::UsdStage::DefinePrim)
-    .function("Download", &download)
-    .function("Export", &Export)
-    .function("GetPrimAtPath", &pxr::UsdStage::GetPrimAtPath)
-    .function("SetDefaultPrim", &pxr::UsdStage::SetDefaultPrim)
-    .function("OverridePrim", &pxr::UsdStage::OverridePrim)
-    .function("GetRootLayer", &pxr::UsdStage::GetRootLayer)
-    .function("GetLayerStack", &pxr::UsdStage::GetLayerStack)
-    .function("GetStartTimeCode", &pxr::UsdStage::GetStartTimeCode)
-    .function("GetEndTimeCode", &pxr::UsdStage::GetEndTimeCode)
-    .function("GetTimeCodesPerSecond", &pxr::UsdStage::GetTimeCodesPerSecond)
-    ;
+        .class_function("Open", &Open)
+        .class_function("Open", select_overload<pxr::UsdStageRefPtr(const pxr::SdfLayerHandle &layer, pxr::UsdStage::InitialLoadSet)>(&pxr::UsdStage::Open))
+        .class_function("Exit", &MyExit)
+        .function("ExportToString", &exportToString<pxr::UsdStage>)
+        .function("DefinePrim", &pxr::UsdStage::DefinePrim)
+        .function("Download", &download)
+        .function("Export", &Export)
+        .function("GetUpAxis", &GetUpAxis)
+        .function("GetPrimAtPath", &pxr::UsdStage::GetPrimAtPath)
+        .function("SetDefaultPrim", &pxr::UsdStage::SetDefaultPrim)
+        .function("OverridePrim", &pxr::UsdStage::OverridePrim)
+        .function("GetRootLayer", &pxr::UsdStage::GetRootLayer)
+        .function("GetLayerStack", &pxr::UsdStage::GetLayerStack)
+        .function("GetStartTimeCode", &pxr::UsdStage::GetStartTimeCode)
+        .function("GetEndTimeCode", &pxr::UsdStage::GetEndTimeCode)
+        .function("GetTimeCodesPerSecond", &pxr::UsdStage::GetTimeCodesPerSecond)
+        ;
 }
