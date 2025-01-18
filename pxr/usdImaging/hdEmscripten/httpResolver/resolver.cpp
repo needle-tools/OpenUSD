@@ -222,8 +222,15 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
         }
     }
     else {
+        // passthrough – just to call out to JS
+        savedAssetFilePath = FetchAndSaveAsset(assetPath, assetPath);
+        // TODO check for error or 0 return here, and then run the ArDefaultResolver::_Resolve call
+    }
+    /*
+    else {
         return ArDefaultResolver::_Resolve(assetPath);
     }
+    */
 
     if (verbose){
         std::cout << "ENDDD_Resolve: " << savedAssetFilePath << std::endl;
