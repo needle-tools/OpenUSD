@@ -39,6 +39,7 @@ if [ $? -eq 0 ]; then
   patch "$build_dir/bin/emHdBindings.js" < "$patch_dir/fileSystem.patch"
   echo -e '\nglobalThis["NEEDLE:USD:GET"] = getUsdModule;' >> "$build_dir/bin/emHdBindings.js"
 
+  cp "$build_dir/bin/emHdBindings.wasm" "$destination_directory/emHdBindings.wasm"
   if [ "$mode" != "release" ]; then
       cp "$build_dir/bin/emHdBindings.wasm" "$destination_directory/emHdBindings.wasm"
   else
