@@ -172,7 +172,7 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
             std::cout << "Already Exists: " << assetPath << std::endl;
         }
     }
-    else if (assetPath.find("http") != std::string::npos){
+    else if (assetPath.rfind("http", 0) == 0) {
         std::string githubName = "github.com";
         std::string rawGithubName = "raw.githubusercontent.com";
         std::string blob = "/blob";
