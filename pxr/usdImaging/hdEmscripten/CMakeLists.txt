@@ -89,7 +89,7 @@ set_target_properties(${BINDINGS_NAME}
 target_link_options(${BINDINGS_NAME} PRIVATE "SHELL: -Oz -s EXPORT_NAME='getUsdModule' \
     -s MODULARIZE=1 -lembind -s PTHREAD_POOL_SIZE=10 -s ASYNCIFY -s ASYNCIFY_ADVISE \
     -sIMPORTED_MEMORY=1 --pre-js ${CMAKE_CURRENT_SOURCE_DIR}/js/MemoryConfiguration.js  \
-    -s ASYNCIFY_REMOVE=['__vfprintf_internal','__fseeko_unlocked','*::itanium_demangle::*','*VtArray*','*_Clear*','*dlfree*','*TfType*','*Tf_Registry*','*Tf_Post*','*tao::PXR_INTERNAL_NS_pegtl*','*UsdObject*','*TfSmallVector*','*TfMallocTag*','*__cxa_guard_acquire*,'*UsdSchema*','*Usd_CrateFile*','*TfEnum*','*TfErrorMark*','*VtStreamOutArray*','*SdfSpec*']")
+    ")
 
 install(
     FILES

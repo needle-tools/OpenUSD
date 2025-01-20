@@ -26,6 +26,7 @@
 #include "pxr/usd/usd/attribute.h"
 #include "pxr/usd/usd/prim.h"
 #include "pxr/usd/usd/references.h"
+#include "pxr/usd/usd/variantSets.h"
 
 #include <emscripten/bind.h>
 using namespace emscripten;
@@ -36,12 +37,45 @@ GetPropertyNames(pxr::UsdPrim& self)
     return self.GetPropertyNames();
 };
 
+
+std::vector<std::string>
+GetVariantSets(pxr::UsdPrim& self)
+{
+    pxr::UsdVariantSets variantSets = self.GetVariantSets();
+    return variantSets.GetNames();
+};
+
+bool
+SetVariant(pxr::UsdPrim& self, const std::string& variantSetName, const std::string& variantName){
+    pxr::UsdVariantSets variantSets = self.GetVariantSets();
+    return variantSets.SetSelection(variantSetName, variantName);
+}
+
+std::vector<std::string>
+GetVariantSetOptions(pxr::UsdPrim& self, const std::string& variantSetName){
+    pxr::UsdVariantSets variantSets = self.GetVariantSets();
+    pxr::UsdVariantSet variantSet = variantSets.GetVariantSet(variantSetName);
+    return variantSet.GetVariantNames();
+}
+
+std::string
+GetVariantSelection(pxr::UsdPrim& self, const std::string& variantSetName){
+    pxr::UsdVariantSets variantSets = self.GetVariantSets();
+    pxr::UsdVariantSet variantSet = variantSets.GetVariantSet(variantSetName);
+    return variantSet.GetVariantSelection();
+}
+
 EMSCRIPTEN_BINDINGS(UsdPrim) {
+  emscripten::register_vector<std::string>("VectorString");
   class_<pxr::UsdPrim>("UsdPrim")
     .function("GetAttribute", &pxr::UsdPrim::GetAttribute)
     .function("GetTypeName", &pxr::UsdPrim::GetTypeName)
     .function("GetAttributes", &pxr::UsdPrim::GetAttributes)
     .function("GetPropertyNames", &GetPropertyNames)
     .function("GetReferences", &pxr::UsdPrim::GetReferences)
+    .function("GetVariantSets", &GetVariantSets)
+    .function("SetVariant", &SetVariant)
+    .function("GetVariantSetOptions", &GetVariantSetOptions)
+    .function("GetVariantSelection", &GetVariantSelection)
     ;
 }
