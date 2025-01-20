@@ -65,7 +65,7 @@ std::filesystem::path HttpResolver::FetchAndSaveAsset(const std::string& route,
         // Attempt to create the directory (and any necessary parent directories)
         if (std::filesystem::create_directories(dirPath)) {
             if (verbose){
-                std::cout << "Directories created successfully: " << dirPath << std::endl;
+                std::cout << "Directories created successfully: " << dirPath << std::endl << " --> for route: " << route << std::endl;
             }
         } else {
             if (verbose){
@@ -221,17 +221,21 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
             std::cout << "Assumed to exist now, trying from baseUrl: " << systemPath << std::endl;
         }
     }
+    /*
     else {
         // passthrough – just to call out to JS
         savedAssetFilePath = FetchAndSaveAsset(assetPath, assetPath);
         // TODO check for error or 0 return here, and then run the ArDefaultResolver::_Resolve call
     }
-    /*
-    else {
-        return ArDefaultResolver::_Resolve(assetPath);
-    }
     */
+    else {
+        // pass through JS so we can modify it there
+        savedAssetFilePath = FetchAndSaveAsset(assetPath, assetPath);
 
+        if (verbose) {
+            std::cout << "FetchAndSaveAsset returns: " << assetPath << " -->" << savedAssetFilePath << std::endl;
+        }
+    }
     if (verbose){
         std::cout << "ENDDD_Resolve: " << savedAssetFilePath << std::endl;
     }
