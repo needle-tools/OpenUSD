@@ -32,6 +32,7 @@ fi
 if [ $? -eq 0 ]; then
 
   prettier --write "$build_dir/bin/emHdBindings.js"
+  prettier --write "$build_dir/bin/emHdBindings.worker.js"
 
   patch "$build_dir/bin/emHdBindings.js" < "$patch_dir/arguments_1.patch"
   patch "$build_dir/bin/emHdBindings.js" -R < "$patch_dir/arguments_2.patch"
