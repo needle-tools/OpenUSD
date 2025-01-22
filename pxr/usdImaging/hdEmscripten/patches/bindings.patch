@@ -1,0 +1,95 @@
+diff --git a/bin/emHdBindings.js b/bin/emHdBindings.js
+--- a/bin/emHdBindings.js
++++ b/bin/emHdBindings.js
+@@ -1,21 +0,10 @@
+-var getUsdModule = ((args) => {
++var getUsdModule = (() => {
+   var _scriptDir =
+     typeof document !== "undefined" && document.currentScript
+       ? document.currentScript.src
+       : undefined;
+   if (typeof __filename !== "undefined") _scriptDir = _scriptDir || __filename;
+-  return function (
+-    moduleArg = {
+-      // module overrides can be supplied here
+-      locateFile: (path, prefix) => {
+-        if (!prefix && _scriptDir)
+-          prefix = _scriptDir.substr(0, _scriptDir.lastIndexOf("/") + 1);
+-        return prefix + path;
+-      },
+-      ...args,
+-      urlModifier: args?.urlModifier,
+-    },
+-  ) {
++  return function (moduleArg = {}) {
+     function GROWABLE_HEAP_I8() {
+       if (wasmMemory.buffer != HEAP8.buffer) {
+         updateMemoryViews();
+@@ -920,7 +909,7 @@
+       }
+       what = "Aborted(" + what + ")";
+       err(what);
+-      // ABORT = true; // this does not allow anything to work after being set, however we're actually okay to try other assets so we shouldn't do this
++      ABORT = true;
+       EXITSTATUS = 1;
+       what += ". Build with -sASSERTIONS for more info.";
+       var e = new WebAssembly.RuntimeError(what);
+@@ -3767,9 +3756,6 @@
+         }
+       },
+       initMainThread() {
+-        // If we set this to 0, there's only one thread, and no back-and-forth
+-        // with the worker; but lower performance and non-parallel fetches.
+-        // This value can also be adjusted at build time by setting PTHREAD_POOL_SIZE in the Makefile.
+         var pthreadPoolSize = 10;
+         while (pthreadPoolSize--) {
+           PThread.allocateUnusedWorker();
+@@ -3852,29 +3838,6 @@
+               worker.postMessage(d);
+             } else if (cmd === "callHandler") {
+               Module[d["handler"]](...d["args"]);
+-            } else if (cmd === "callHandlerAsync") {
+-              // Async trampoline to the main thread and back.
+-              // The worker waits for the postMessage response from the main thread.
+-              // We can shovel transferable objects from the main thread to the worker this way,
+-              // for example file system handles (https://developer.mozilla.org/en-US/docs/Web/API/File_System_API)
+-              let result = Module[d["handler"]](...d["args"]);
+-              if (result instanceof Promise) {
+-                result.then((r) => {
+-                  worker.postMessage({
+-                    cmd: "callHandlerAsyncResult",
+-                    handler: d["handler"],
+-                    id: d["id"],
+-                    result: r,
+-                  });
+-                });
+-              } else {
+-                worker.postMessage({
+-                  cmd: "callHandlerAsyncResult",
+-                  handler: d["handler"],
+-                  id: d["id"],
+-                  result,
+-                });
+-              }
+             } else if (cmd) {
+               err(`worker sent an unknown command ${cmd}`);
+             }
+@@ -8049,9 +8012,6 @@
+     Module["FS_createDataFile"] = FS.createDataFile;
+     Module["FS_createPreloadedFile"] = FS.createPreloadedFile;
+     Module["FS_unlink"] = FS.unlink;
+-    Module["FS_readdir"] = FS.readdir;
+-    Module["FS_rmdir"] = FS.rmdir;
+-    Module["FS_analyzePath"] = FS.analyzePath;
+     Module["FS_createLazyFile"] = FS.createLazyFile;
+     Module["FS_createDevice"] = FS.createDevice;
+     embind_init_charCodes();
+@@ -12156,8 +12116,6 @@
+     Module["FS_createDataFile"] = FS.createDataFile;
+     Module["FS_unlink"] = FS.unlink;
+     Module["PThread"] = PThread;
+-    Module["FS_readdir"] = FS.readdir;
+-    Module["FS_analyzePath"] = FS.analyzePath;
+     var calledRun;
+     dependenciesFulfilled = function runCaller() {
+       if (!calledRun) run();

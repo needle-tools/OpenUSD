@@ -22,25 +22,185 @@ struct AssetData {
 
 EM_ASYNC_JS(void, fetch_asset, (const char* route, int dataPtr), {
     const routeString = UTF8ToString(route);
-    const absoluteUrl = new URL(routeString);
+    const verbose = false;
+    let absoluteUrl = routeString;
+
+    // Sanitization: we need to turn the prim path back into a URL.
+    // The only thing that gets lost is the second colon.
+    // Additionally, things like query parameters aren't supported,
+    // since USD doesn't understand the filetype then.
+    if (absoluteUrl.startsWith("/http")) absoluteUrl = absoluteUrl.slice(1);
+    if (absoluteUrl.includes("http:/"))
+        absoluteUrl = absoluteUrl.replace("http:/", "http://");
+    if (absoluteUrl.includes("https:/"))
+        absoluteUrl = absoluteUrl.replace("https:/", "https://");
+
+    /** @typedef {string | FileSystemFileHandle | FileSystemFileEntry | ArrayBuffer | File | Blob} Result */
+    /** @type {Result | null} */
+    let callbackResult = null;
+
+    /** @type {ArrayBuffer | null} */
+    let buffer = null;
+
+    // From a worker thread, we call back to the main thread to get a chance to modify what we're doing
+    // to get the asset into memory.
+    // What is returned from fetch_asset becomes put on disk.
+    // We could get it from a dropped file (and can transfer the FileSystemFileHandle to the worker)
+    // or from a blob URL (which will then be fetched inside the worker).
+    if (ENVIRONMENT_IS_PTHREAD) {
+        if (verbose)
+        console.log("we're in a thread, calling urlCallback", absoluteUrl);
+        let result;
+        try {
+        result = await Module["urlCallbackFromWorker"](absoluteUrl);
+        } catch (e) {
+        console.error(
+            "Error in thread callback for",
+            absoluteUrl,
+            "error:",
+            e,
+        );
+        }
+        if (verbose) console.log("got result inside worker", result);
+        // check what we got. if it's a handle, we can resolve it;
+        // if it's a buffer, we can stop here and don't need to fetch anymore;
+        // if it's a URL, we still need to fetch it below.
+        callbackResult = result;
+    }
+    // From the main thread, we can directly call the URL modifier.
+    else if (typeof Module["urlModifier"] === "function") {
+        const prev = absoluteUrl;
+        const callback = Module["urlModifier"];
+        if (verbose) console.log("callback", callback);
+        let result = callback(absoluteUrl);
+        if (result instanceof Promise) result = await result;
+
+        callbackResult = result;
+        if (verbose)
+        console.log(
+            "found modifier, URL is now",
+            callbackResult,
+            "was",
+            prev,
+            "modifier now",
+            Module["urlModifier"],
+        );
+    } else {
+        if (verbose)
+        console.log("no URL modifier found", Module["urlModifier"]);
+    }
+
+    // Resolve asset. we could have received a number of different things from the callback.
+    // All of these types are transferable to the worker thread.
+    // Even better would be to transfer a FileSystemFileHandle directly, because
+    // then even getting the file from the file system would be done in the worker.
     try {
-        const response = await fetch(absoluteUrl);
-        if (!response.ok) throw new Error('Fetch failed: ' + response.statusText);
-        const buffer = await response.arrayBuffer();
+        if (callbackResult && typeof callbackResult === "object") {
+        // https://developer.mozilla.org/en-US/docs/Web/API/FileSystemFileHandle
+        if ("getFile" in callbackResult) {
+            buffer = await (await callbackResult.getFile()).arrayBuffer();
+        }
+        // https://developer.mozilla.org/en-US/docs/Web/API/FileSystemFileEntry
+        else if ("file" in callbackResult) {
+            buffer = await new Promise((resolve, reject) => {
+            callbackResult.file((x) => {
+                const reader = new FileReader();
+                // @ts-ignore
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(x);
+            }, reject);
+            });
+        }
+        // https://developer.mozilla.org/en-US/docs/Web/API/File
+        else if (callbackResult instanceof File) {
+            buffer = await callbackResult.arrayBuffer();
+        }
+        // https://developer.mozilla.org/en-US/docs/Web/API/Blob
+        else if (callbackResult instanceof Blob) {
+            buffer = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            // @ts-ignore
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(callbackResult);
+            });
+        }
+        // https://developer.mozilla.org/en-US/docs/Web/API/ArrayBuffer
+        else if (callbackResult instanceof ArrayBuffer) {
+            buffer = callbackResult;
+        }
+        }
+        // regular URL
+        else if (typeof callbackResult === "string") {
+        absoluteUrl = callbackResult;
+        }
+    } catch (e) {
+        console.error(
+        "Error after main thread callback in fetch_asset for",
+        absoluteUrl,
+        "error:",
+        e,
+        );
+        Module.HEAP32[dataPtr >> 2] = 0;
+        Module.HEAP32[(dataPtr >> 2) + 1] = 0;
+        return;
+    }
+
+    if (verbose) console.log("fetching asset", absoluteUrl);
+    try {
+        // If we don't already have a buffer, we assume we need to fetch it from the absoluteUrl.
+        // Otherwise, we can skip this step.
+        if (buffer === null) {
+        buffer = await fetch(absoluteUrl)
+            .then((r) => {
+            if (verbose) console.log(r.status + " " + r.statusText);
+            return r.arrayBuffer();
+            })
+            .catch((e) => null);
+        }
+
+        if (!buffer || buffer.byteLength === 0) {
+        console.error("Error fetching asset – couldn't fetch", absoluteUrl);
+
+        /// TODO not sure why we can't just return here,
+        /// potentially there's missing error correction on the C++ side to
+        /// check the return type...
+        /// We just want to continue execution and not crash
+        // Module.HEAP32[dataPtr >> 2] = 0;
+        // Module.HEAP32[(dataPtr >> 2) + 1] = 0;
+        // return;
+
+        // Workaround for the issue mentioned above
+        buffer = new ArrayBuffer(1);
+        }
+
+        if (verbose) console.log("after awaiting buffer", buffer);
         const length = buffer.byteLength;
         const ptr = _malloc(length);
-        HEAPU8.set(new Uint8Array(buffer), ptr);
 
-        // Correctly set the pointer and length in the AssetData structure
-        // Note: Assumes dataPtr is a pointer to the structure where the first member is an int pointer
-        // to the content, and the second is an int for the length. The layout and alignment in C++
-        // should match this assumption.
-        Module.HEAP32[dataPtr >> 2] = ptr; // Set the pointer
-        Module.HEAP32[(dataPtr >> 2) + 1] = length; // Set the length
+        /// useful for debugging to see what response we actually get
+        // const fileReader = new FileReader();
+        // fileReader.onload = function() { console.log("fileReader.onload", fileReader.result); };
+        // fileReader.readAsText(new Blob([buffer]));
+
+        if (verbose)
+        console.log(
+            "fetch complete for ",
+            absoluteUrl,
+            " ->",
+            length,
+            "bytes",
+        );
+        GROWABLE_HEAP_U8().set(new Uint8Array(buffer), ptr >>> 0);
+        Module.HEAP32[dataPtr >> 2] = ptr;
+        Module.HEAP32[(dataPtr >> 2) + 1] = length;
+        return;
     } catch (err) {
-        console.error("Error in fetch_asset: ", err);
-        Module.HEAP32[dataPtr >> 2] = 0; // Indicate failure with null pointer
-        Module.HEAP32[(dataPtr >> 2) + 1] = 0; // and zero length
+        console.error("Error in fetch_asset for", absoluteUrl, err);
+        Module.HEAP32[dataPtr >> 2] = 0;
+        Module.HEAP32[(dataPtr >> 2) + 1] = 0;
+        return;
     }
 });
 
@@ -108,59 +268,6 @@ void HttpResolver::saveBinaryAssetContentToFile(const char* assetContent, size_t
     }
 }
 
-void HttpResolver::setBaseUrl(const std::string& url) const {
-    baseUrl = url;
-}
-
-void HttpResolver::setBaseTempDir(const std::string& tempDir) const {
-    baseTempDir = tempDir;
-}
-
-std::string correctURL(const std::string& url) {
-    std::string correctedUrl = url;
-    size_t pos;
-
-    // Correct https:/ to https://
-    pos = correctedUrl.find("https:/");
-    if (pos != std::string::npos && correctedUrl.substr(pos, 7) == "https:/" && (pos + 7 == correctedUrl.size() || correctedUrl[pos + 7] != '/')) {
-        correctedUrl.replace(pos, 6, "https://");
-    }
-
-    // Correct http:/ to http://
-    pos = correctedUrl.find("http:/");
-    if (pos != std::string::npos && correctedUrl.substr(pos, 6) == "http:/" && (pos + 6 == correctedUrl.size() || correctedUrl[pos + 6] != '/')) {
-        correctedUrl.replace(pos, 5, "http://");
-    }
-
-    return correctedUrl;
-}
-
-std::string combineUrl(const std::string& baseUrl, const std::string& relativePath) {
-    // Step 1: Strip off the scheme
-    auto schemeEnd = baseUrl.find(":/");
-    if (schemeEnd == std::string::npos) {
-        return baseUrl + relativePath;
-    }
-    std::string scheme = baseUrl.substr(0, schemeEnd + 3); // Include "://"
-    std::string basePath = baseUrl.substr(schemeEnd + 3);
-
-    // Extract the domain
-    auto pathStart = basePath.find('/');
-    std::string domain = basePath.substr(0, pathStart);
-    std::string pathOnly = basePath.substr(pathStart); // Path without the domain
-
-    // Step 2: Use filesystem::path for manipulation
-    std::filesystem::path pathObj = pathOnly;
-    pathObj = pathObj.remove_filename(); // Ensure we're manipulating the directory part
-    pathObj /= relativePath; // Append the relative path
-    pathObj = pathObj.lexically_normal(); // Normalize the path (resolve "..", ".", etc.)
-
-    // Step 3: Recombine
-    std::string combinedUrl = scheme + domain + pathObj.string();
-
-    return combinedUrl;
-}
-
 ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
     if (verbose){
         std::cout << "_Resolve: " << assetPath << std::endl;
@@ -172,68 +279,18 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
             std::cout << "Already Exists: " << assetPath << std::endl;
         }
     }
-    else if (assetPath.rfind("http", 0) == 0) {
-        std::string githubName = "github.com";
-        std::string rawGithubName = "raw.githubusercontent.com";
-        std::string blob = "/blob";
-
-        size_t pos = stringAssetPathCopy.find(githubName);
-        if (pos!= std::string::npos) {
-            stringAssetPathCopy.replace(pos, githubName.length(), rawGithubName);
-        }
-
-        size_t pos_blob = stringAssetPathCopy.find(blob);
-        if (pos_blob!= std::string::npos) {
-            stringAssetPathCopy.erase(pos_blob, blob.length());
-        }
-
-        std::filesystem::path fullHttpRouteAsPath = stringAssetPathCopy;
-        std::filesystem::path rootHttpRouteAsPath = fullHttpRouteAsPath.parent_path();
-
-        auto finalBaseUrl = rootHttpRouteAsPath.generic_string() + "/";
-        if (verbose){
-            std::cout << "http PATH: " << stringAssetPathCopy << std::endl;
-            std::cout << "finalBaseUrl: " << finalBaseUrl << std::endl;
-        }
-
-        setBaseUrl(finalBaseUrl);
-
-        std::filesystem::path tempDir = std::filesystem::temp_directory_path();
-        // This path is chosen because if an asset is found with the path /../../../ it will go up the tmp directory structure
-        // in the case of using /tmp/ then all relative paths greater than depth 1, will look the same. using 6 here is arbitrary,
-        // is there a way to make this always work?
-        setBaseTempDir(tempDir.generic_string() + "/1/1/1/1/1/1/");
-        auto filePath = baseTempDir + fullHttpRouteAsPath.filename().generic_string();
-        savedAssetFilePath = FetchAndSaveAsset(assetPath,
-                                               filePath);
-    }
-    else if (!baseUrl.empty()){
-        std::filesystem::path systemPath = stringAssetPathCopy;
-        std::filesystem::path relativePath = std::filesystem::relative(systemPath, baseTempDir);
-
-        std::string route = combineUrl(baseUrl, relativePath);
-        if (verbose){
-            std::cout << "Relative Path before: " << relativePath << std::endl;
-        }
-
-        savedAssetFilePath = FetchAndSaveAsset(route, systemPath);
-        if (verbose){
-            std::cout << "Assumed to exist now, trying from baseUrl: " << systemPath << std::endl;
-        }
-    }
-    /*
     else {
-        // passthrough – just to call out to JS
-        savedAssetFilePath = FetchAndSaveAsset(assetPath, assetPath);
-        // TODO check for error or 0 return here, and then run the ArDefaultResolver::_Resolve call
-    }
-    */
-    else {
+        auto path = assetPath;
+        // Nudge USD to interpret the URL as path and put assets there
+        if (path.rfind("http", 0) == 0) {
+            path = "/" + path;
+        }
+
         // pass through JS so we can modify it there
-        savedAssetFilePath = FetchAndSaveAsset(assetPath, assetPath);
+        savedAssetFilePath = FetchAndSaveAsset(path, path);
 
         if (verbose) {
-            std::cout << "FetchAndSaveAsset returns: " << assetPath << " -->" << savedAssetFilePath << std::endl;
+            std::cout << "FetchAndSaveAsset returns: " << path << " -->" << savedAssetFilePath << std::endl;
         }
     }
     if (verbose){

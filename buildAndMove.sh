@@ -22,11 +22,13 @@ if [ "$mode" != "debug" ] && [ "$mode" != "release" ]; then
     usage
 fi
 
+# :'
 if [ "$mode" != "release" ]; then
   python3 build_scripts/build_usd.py --build-target wasm --build-variant debug "$build_dir"
 else
   python3 build_scripts/build_usd.py --build-target wasm "$build_dir"
 fi
+# '
 
 # Check if the Python script executed successfully
 if [ $? -eq 0 ]; then
@@ -34,10 +36,16 @@ if [ $? -eq 0 ]; then
   prettier --write "$build_dir/bin/emHdBindings.js"
   prettier --write "$build_dir/bin/emHdBindings.worker.js"
 
-  patch "$build_dir/bin/emHdBindings.js" < "$patch_dir/arguments_1.patch"
-  patch "$build_dir/bin/emHdBindings.js" -R < "$patch_dir/arguments_2.patch"
-  patch "$build_dir/bin/emHdBindings.js" < "$patch_dir/abort.patch"
-  patch "$build_dir/bin/emHdBindings.js" < "$patch_dir/fileSystem.patch"
+  # patch "$build_dir/bin/emHdBindings.js" < "$patch_dir/arguments_1.patch"
+  # patch "$build_dir/bin/emHdBindings.js" -R < "$patch_dir/arguments_2.patch"
+  # patch "$build_dir/bin/emHdBindings.js" < "$patch_dir/abort.patch"
+  # patch "$build_dir/bin/emHdBindings.js" < "$patch_dir/fileSystem.patch"
+  # patch "$build_dir/bin/emHdBindings.js" < "$patch_dir/threading.patch"
+
+  patch "$build_dir/bin/emHdBindings.js" -R < "$patch_dir/bindings.patch"
+  patch "$build_dir/bin/emHdBindings.worker.js" -R < "$patch_dir/worker.patch"
+
+  # Required for the USD module to be available in the global scope
   echo -e '\nglobalThis["NEEDLE:USD:GET"] = getUsdModule;' >> "$build_dir/bin/emHdBindings.js"
 
   cp "$build_dir/bin/emHdBindings.wasm" "$destination_directory/emHdBindings.wasm"

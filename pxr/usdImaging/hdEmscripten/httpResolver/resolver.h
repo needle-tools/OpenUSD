@@ -18,12 +18,8 @@ public:
     ArResolvedPath _ResolveForNewAsset(const std::string &assetPath) const override;
     std::filesystem::path FetchAndSaveAsset(const std::string& baseUrl, const std::string& filePath) const;
     void saveBinaryAssetContentToFile(const char* assetContent, size_t length, const std::string& filePath) const;
-    void setBaseUrl(const std::string &url) const;
-    void setBaseTempDir(const std::string &tempDir) const;
 private:
-    mutable std::string baseUrl;
-    bool verbose = true;
-    mutable std::string baseTempDir;
+    bool verbose = false;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
