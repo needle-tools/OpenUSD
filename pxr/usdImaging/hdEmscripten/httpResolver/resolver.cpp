@@ -269,33 +269,26 @@ void HttpResolver::saveBinaryAssetContentToFile(const char* assetContent, size_t
 }
 
 ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
-    if (verbose){
-        std::cout << "_Resolve: " << assetPath << std::endl;
-    }
-    std::string stringAssetPathCopy = assetPath;
+    if (verbose) std::cout << "[_Resolve] Begin: " << assetPath << std::endl;
+
     std::filesystem::path savedAssetFilePath = assetPath;
-    if (std::filesystem::exists(assetPath)){
-        if (verbose) {
-            std::cout << "Already Exists: " << assetPath << std::endl;
-        }
+
+    if (std::filesystem::exists(assetPath)) {
+        if (verbose) std::cout << "[_Resolve] File already exists: " << assetPath << std::endl;
     }
     else {
-        auto path = assetPath;
         // Nudge USD to interpret the URL as path and put assets there
-        if (path.rfind("http", 0) == 0) {
-            path = "/" + path;
-        }
+        auto path = assetPath;
+        if (path.rfind("http", 0) == 0) path = "/" + path;
 
-        // pass through JS so we can modify it there
+        // Pass through to JS so we can resolve from there.
+        // The JS code is expected to return binary data, which we then save to disk.
+        // TODO Error handling – we shouldn't put empty data on disk here.
         savedAssetFilePath = FetchAndSaveAsset(path, path);
 
-        if (verbose) {
-            std::cout << "FetchAndSaveAsset returns: " << path << " -->" << savedAssetFilePath << std::endl;
-        }
+        if (verbose) std::cout << "[_Resolve] FetchAndSaveAsset: " << path << " -->" << savedAssetFilePath << std::endl;
     }
-    if (verbose){
-        std::cout << "ENDDD_Resolve: " << savedAssetFilePath << std::endl;
-    }
+    if (verbose) std::cout << "[_Resolve] End: " << savedAssetFilePath << std::endl;
 
     return ArResolvedPath(savedAssetFilePath);
 }
