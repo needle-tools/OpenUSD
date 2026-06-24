@@ -41,6 +41,7 @@ class TestArPackageResolver(unittest.TestCase):
         pr = Plug.Registry()
         self.assertTrue(pr.GetPluginWithName('TestArPackageResolver'))
         self.assertTrue(Tf.Type.FindByName('_TestPackageResolver'))
+        self.assertTrue(Tf.Type.FindByName('_TestSubPackageResolver'))
 
     def test_Resolver(self):
         def _test(packageFileName):
@@ -63,6 +64,18 @@ class TestArPackageResolver(unittest.TestCase):
         # Verify that Ar is case-insensitive when checking for a
         # package resolver.
         _test("test.PACKAGE")
+
+    def test_NestedPackageResolverDispatch(self):
+        Path("test.package").touch()
+
+        testPackagedFilePath = Ar.JoinPackageRelativePath(
+            ["test.package", "inner.subpackage", "asset.file"])
+
+        resolver = Ar.GetResolver()
+        self.assertPathsEqual(
+            resolver.Resolve(testPackagedFilePath),
+            os.path.abspath(
+                "test.package[inner.subpackage[subpackage_resolved_asset.file]]"))
 
 if __name__ == '__main__':
     unittest.main()

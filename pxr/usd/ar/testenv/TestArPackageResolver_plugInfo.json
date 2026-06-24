@@ -11,6 +11,10 @@
                     "_TestPackageResolver": {
                         "bases": ["ArPackageResolver"],
                         "extensions": ["package"]
+                    },
+                    "_TestSubPackageResolver": {
+                        "bases": ["ArPackageResolver"],
+                        "extensions": ["subpackage"]
                     }
                 }
             }
