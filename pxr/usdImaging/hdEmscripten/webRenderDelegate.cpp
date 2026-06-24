@@ -37,6 +37,7 @@
 #include "pxr/imaging/hd/materialNetwork2Interface.h"
 #include "pxr/imaging/hd/smoothNormals.h"
 #include "pxr/imaging/hd/vtBufferSource.h"
+#include "pxr/usd/ar/resolver.h"
 #include "pxr/usd/sdf/assetPath.h"
 
 #if __has_include("pxr/imaging/hdMtlx/hdMtlx.h") && __has_include(<MaterialXFormat/XmlIo.h>)
@@ -516,6 +517,8 @@ public:
             HdMaterialNetworkMap const& hdNetworkMap =
                 vtMat.UncheckedGet<HdMaterialNetworkMap>();
 
+            _sPrim.call<val>("beginMaterialSync");
+
 #if HD_EMSCRIPTEN_HAS_MATERIALX
             _SendMaterialXDocument(hdNetworkMap);
 #endif
@@ -537,6 +540,10 @@ public:
                                 resolvedPath);
                             if (parameterName == TfToken("file")) {
                                 parameters.set("resolvedPath", resolvedPath);
+                            }
+                            if (!resolvedPath.empty()) {
+                                ArGetResolver().OpenAsset(
+                                    ArResolvedPath(resolvedPath));
                             }
                         }
                     }

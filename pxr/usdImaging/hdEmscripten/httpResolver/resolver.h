@@ -5,6 +5,7 @@
 #include <pxr/usd/ar/defineResolver.h>
 #include <emscripten/fetch.h>
 #include <emscripten.h>
+#include <unordered_map>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -24,6 +25,7 @@ private:
     mutable std::string baseUrl;
     bool verbose = false;
     mutable std::string baseTempDir;
+    mutable std::unordered_map<std::string, std::string> resolvedRoutes;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

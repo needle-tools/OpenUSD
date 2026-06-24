@@ -17,30 +17,35 @@ HttpResolver::~HttpResolver() {}
 
 struct AssetData {
     int ptrToContent;
-    int length; // Use int for compatibility with JavaScript's setValue; adjust if necessary
+    int length;
 };
 
-EM_ASYNC_JS(void, fetch_asset, (const char* route, int dataPtr), {
+EM_JS(void, fetch_asset, (const char* route, int dataPtr), {
     const routeString = UTF8ToString(route);
-    const absoluteUrl = new URL(routeString);
     try {
-        const response = await fetch(absoluteUrl);
-        if (!response.ok) throw new Error('Fetch failed: ' + response.statusText);
-        const buffer = await response.arrayBuffer();
-        const length = buffer.byteLength;
+        const request = new XMLHttpRequest();
+        request.open('GET', routeString, false);
+        request.overrideMimeType('text/plain; charset=x-user-defined');
+        request.send(null);
+        if (request.status !== 0 && (request.status < 200 || request.status >= 300)) {
+            throw new Error('Fetch failed: ' + request.statusText);
+        }
+        const response = request.responseText;
+        if (response == null) throw new Error('Fetch failed: empty response');
+        const length = response.length;
         const ptr = _malloc(length);
-        HEAPU8.set(new Uint8Array(buffer), ptr);
-
-        // Correctly set the pointer and length in the AssetData structure
-        // Note: Assumes dataPtr is a pointer to the structure where the first member is an int pointer
-        // to the content, and the second is an int for the length. The layout and alignment in C++
-        // should match this assumption.
-        Module.HEAP32[dataPtr >> 2] = ptr; // Set the pointer
-        Module.HEAP32[(dataPtr >> 2) + 1] = length; // Set the length
+        const heap8 = typeof GROWABLE_HEAP_U8 === 'function' ? GROWABLE_HEAP_U8() : HEAPU8;
+        for (let i = 0; i < length; i++) {
+            heap8[ptr + i] = response.charCodeAt(i) & 0xff;
+        }
+        const heap32 = typeof GROWABLE_HEAP_I32 === 'function' ? GROWABLE_HEAP_I32() : HEAP32;
+        heap32[dataPtr >> 2] = ptr;
+        heap32[(dataPtr >> 2) + 1] = length;
     } catch (err) {
         console.error("Error in fetch_asset: ", err);
-        Module.HEAP32[dataPtr >> 2] = 0; // Indicate failure with null pointer
-        Module.HEAP32[(dataPtr >> 2) + 1] = 0; // and zero length
+        const heap32 = typeof GROWABLE_HEAP_I32 === 'function' ? GROWABLE_HEAP_I32() : HEAP32;
+        heap32[dataPtr >> 2] = 0;
+        heap32[(dataPtr >> 2) + 1] = 0;
     }
 });
 
@@ -75,6 +80,10 @@ std::filesystem::path HttpResolver::FetchAndSaveAsset(const std::string& route,
 
         AssetData* data = new AssetData();
         fetch_asset(route.c_str(), reinterpret_cast<int>(data));
+        if (data->ptrToContent == 0 || data->length == 0) {
+            delete data;
+            return filePath;
+        }
         char *assetContentCString = reinterpret_cast<char *>(data->ptrToContent);
         saveBinaryAssetContentToFile(assetContentCString, data->length, filePath);
 
@@ -123,16 +132,36 @@ std::string correctURL(const std::string& url) {
     // Correct https:/ to https://
     pos = correctedUrl.find("https:/");
     if (pos != std::string::npos && correctedUrl.substr(pos, 7) == "https:/" && (pos + 7 == correctedUrl.size() || correctedUrl[pos + 7] != '/')) {
-        correctedUrl.replace(pos, 6, "https://");
+        correctedUrl.replace(pos, 7, "https://");
     }
 
     // Correct http:/ to http://
     pos = correctedUrl.find("http:/");
     if (pos != std::string::npos && correctedUrl.substr(pos, 6) == "http:/" && (pos + 6 == correctedUrl.size() || correctedUrl[pos + 6] != '/')) {
-        correctedUrl.replace(pos, 5, "http://");
+        correctedUrl.replace(pos, 6, "http://");
     }
 
     return correctedUrl;
+}
+
+bool isHttpUrl(const std::string& path) {
+    return path.rfind("http://", 0) == 0 || path.rfind("https://", 0) == 0;
+}
+
+std::string extractHttpUrl(const std::string& path) {
+    if (isHttpUrl(path)) {
+        return path;
+    }
+
+    size_t pos = path.find("https:/");
+    if (pos == std::string::npos) {
+        pos = path.find("http:/");
+    }
+    if (pos == std::string::npos) {
+        return path;
+    }
+
+    return correctURL(path.substr(pos));
 }
 
 std::string combineUrl(const std::string& baseUrl, const std::string& relativePath) {
@@ -165,14 +194,14 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
     if (verbose){
         std::cout << "_Resolve: " << assetPath << std::endl;
     }
-    std::string stringAssetPathCopy = assetPath;
+    std::string stringAssetPathCopy = extractHttpUrl(assetPath);
     std::filesystem::path savedAssetFilePath = assetPath;
     if (std::filesystem::exists(assetPath)){
         if (verbose) {
             std::cout << "Already Exists: " << assetPath << std::endl;
         }
     }
-    else if (assetPath.rfind("http", 0) == 0) {
+    else if (isHttpUrl(stringAssetPathCopy)) {
         std::string githubName = "github.com";
         std::string rawGithubName = "raw.githubusercontent.com";
         std::string blob = "/blob";
@@ -204,8 +233,8 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
         // is there a way to make this always work?
         setBaseTempDir(tempDir.generic_string() + "/1/1/1/1/1/1/");
         auto filePath = baseTempDir + fullHttpRouteAsPath.filename().generic_string();
-        savedAssetFilePath = FetchAndSaveAsset(stringAssetPathCopy,
-                                               filePath);
+        savedAssetFilePath = FetchAndSaveAsset(stringAssetPathCopy, filePath);
+        resolvedRoutes[savedAssetFilePath.generic_string()] = stringAssetPathCopy;
     }
     else if (!baseUrl.empty()){
         std::filesystem::path systemPath = stringAssetPathCopy;
@@ -217,6 +246,7 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
         }
 
         savedAssetFilePath = FetchAndSaveAsset(route, systemPath);
+        resolvedRoutes[savedAssetFilePath.generic_string()] = route;
         if (verbose){
             std::cout << "Assumed to exist now, trying from baseUrl: " << systemPath << std::endl;
         }
@@ -235,6 +265,27 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
 std::shared_ptr<ArAsset> HttpResolver::_OpenAsset(const ArResolvedPath &resolvedPath) const {
     if (verbose){
         std::cout << "_OpenAsset: " << resolvedPath.GetPathString() << std::endl;
+    }
+
+    const std::string path = resolvedPath.GetPathString();
+    if (!std::filesystem::exists(path)) {
+        std::string route;
+        const auto routeIt = resolvedRoutes.find(path);
+        if (routeIt != resolvedRoutes.end()) {
+            route = routeIt->second;
+        }
+        else if (!baseUrl.empty() && !baseTempDir.empty()) {
+            std::filesystem::path systemPath = path;
+            std::filesystem::path relativePath = std::filesystem::relative(systemPath, baseTempDir);
+            if (!relativePath.empty() && relativePath.native().rfind("..", 0) != 0) {
+                route = combineUrl(baseUrl, relativePath.generic_string());
+                resolvedRoutes[path] = route;
+            }
+        }
+
+        if (!route.empty()) {
+            FetchAndSaveAsset(route, path);
+        }
     }
 
     return ArDefaultResolver::_OpenAsset(resolvedPath);
