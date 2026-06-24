@@ -138,6 +138,30 @@ public:
         _engine.Execute(&_delegate->GetRenderIndex(), &tasks);
     }
 
+    void Repopulate() {
+        if (!_stage) {
+            return;
+        }
+
+        delete _delegate;
+        _delegate = nullptr;
+        delete _renderIndex;
+        _renderIndex = nullptr;
+        _geometryPass.reset();
+
+        HdRprimCollection collection = HdRprimCollection(
+                HdTokens->geometry,
+                HdReprSelector(HdReprTokens->hull));
+
+        TfTokenVector renderTags;
+        renderTags.push_back(HdRenderTagTokens->geometry);
+
+        _Init(_stage,
+              collection,
+              SdfPath::AbsoluteRootPath(),
+              renderTags);
+    }
+
     void getFile(std::string filename, emscripten::val callback) {
         if (!_stage) {
             callback(emscripten::val::undefined());

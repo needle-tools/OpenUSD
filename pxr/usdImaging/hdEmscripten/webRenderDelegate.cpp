@@ -71,6 +71,14 @@ void runInMainThread(std::function<void()> fun) {
     emscripten_sync_run_in_main_runtime_thread(EM_FUNC_SIG_VI, _runInMainThread, (void *) &fun);
 }
 
+bool _HasJsMethod(emscripten::val const& object, char const* name) {
+    if (object.isUndefined() || object.isNull()) {
+        return false;
+    }
+    emscripten::val method = object[name];
+    return !method.isUndefined() && method.typeOf().as<std::string>() == "function";
+}
+
 template <class Vec>
 emscripten::val _GfVecToJsVal(Vec const &vec)
 {
@@ -184,7 +192,12 @@ public:
       _rPrim = _renderDelegateInterface.call<val>("createRPrim", std::string(typeId.GetText()), id.GetAsString());
     }
 
-    virtual ~Emscripten_Rprim() = default;
+    virtual ~Emscripten_Rprim() {
+      if (_meshUtil != NULL) {
+        delete _meshUtil;
+        _meshUtil = NULL;
+      }
+    }
 
     struct Section {
         int start;
@@ -711,6 +724,10 @@ WebRenderDelegate::CreateRprim(TfToken const& typeId,
 void
 WebRenderDelegate::DestroyRprim(HdRprim *rPrim)
 {
+    if (_HasJsMethod(_renderDelegateInterface, "destroyRPrim")) {
+        _renderDelegateInterface.call<void>(
+            "destroyRPrim", rPrim->GetId().GetAsString());
+    }
     delete rPrim;
 }
 
@@ -743,6 +760,10 @@ WebRenderDelegate::CreateFallbackSprim(TfToken const& typeId)
 void
 WebRenderDelegate::DestroySprim(HdSprim *sPrim)
 {
+    if (_HasJsMethod(_renderDelegateInterface, "destroySPrim")) {
+        _renderDelegateInterface.call<void>(
+            "destroySPrim", sPrim->GetId().GetAsString());
+    }
     delete sPrim;
 }
 
