@@ -1,0 +1,79 @@
+{
+  "classes": [
+    {
+      "cppType": "pxr::SdfLayer",
+      "jsName": "Layer",
+      "tsName": "USDLayer",
+      "methods": [
+        { "jsName": "GetIdentifier", "tsReturn": "string", "op": "direct", "cpp": "&pxr::SdfLayer::GetIdentifier" },
+        { "jsName": "GetDisplayName", "tsReturn": "string", "op": "direct", "cpp": "&pxr::SdfLayer::GetDisplayName" },
+        { "jsName": "ExportToString", "tsReturn": "string", "op": "layerExportToString" },
+        { "jsName": "Save", "tsReturn": "boolean", "op": "layerSave" }
+      ]
+    },
+    {
+      "cppType": "pxr::UsdAttribute",
+      "jsName": "Attribute",
+      "tsName": "USDAttribute",
+      "methods": [
+        { "jsName": "IsValid", "tsReturn": "boolean", "op": "boolOperator" },
+        { "jsName": "GetName", "tsReturn": "string", "op": "tokenString", "cpp": "GetName" },
+        { "jsName": "GetPath", "tsReturn": "string", "op": "pathString", "cpp": "GetPath" },
+        { "jsName": "GetTypeName", "tsReturn": "string", "op": "attributeTypeName" },
+        { "jsName": "GetValueString", "tsReturn": "string", "op": "attributeValueString" }
+      ]
+    },
+    {
+      "cppType": "pxr::UsdRelationship",
+      "jsName": "Relationship",
+      "tsName": "USDRelationship",
+      "methods": [
+        { "jsName": "IsValid", "tsReturn": "boolean", "op": "boolOperator" },
+        { "jsName": "GetName", "tsReturn": "string", "op": "tokenString", "cpp": "GetName" },
+        { "jsName": "GetPath", "tsReturn": "string", "op": "pathString", "cpp": "GetPath" },
+        { "jsName": "GetTargets", "tsReturn": "StringVector", "op": "relationshipTargets" }
+      ]
+    },
+    {
+      "cppType": "pxr::UsdPrim",
+      "jsName": "Prim",
+      "tsName": "USDPrim",
+      "methods": [
+        { "jsName": "IsValid", "tsReturn": "boolean", "op": "boolOperator" },
+        { "jsName": "GetName", "tsReturn": "string", "op": "tokenString", "cpp": "GetName" },
+        { "jsName": "GetPath", "tsReturn": "string", "op": "pathString", "cpp": "GetPath" },
+        { "jsName": "GetTypeName", "tsReturn": "string", "op": "tokenString", "cpp": "GetTypeName" },
+        { "jsName": "IsActive", "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::IsActive" },
+        { "jsName": "SetActive", "tsArgs": [{ "name": "active", "type": "boolean" }], "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::SetActive" },
+        { "jsName": "IsDefined", "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::IsDefined" },
+        { "jsName": "IsLoaded", "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::IsLoaded" },
+        { "jsName": "GetParent", "tsReturn": "USDPrim", "op": "direct", "cpp": "&pxr::UsdPrim::GetParent" },
+        { "jsName": "GetChildren", "tsReturn": "USDPrimVector", "op": "primChildren" },
+        { "jsName": "GetPropertyNames", "tsReturn": "StringVector", "op": "tokenVectorString", "cpp": "GetPropertyNames" },
+        { "jsName": "GetAttribute", "tsArgs": [{ "name": "name", "type": "string" }], "tsReturn": "USDAttribute", "op": "primGetAttribute" },
+        { "jsName": "GetRelationship", "tsArgs": [{ "name": "name", "type": "string" }], "tsReturn": "USDRelationship", "op": "primGetRelationship" }
+      ]
+    },
+    {
+      "cppType": "pxr::UsdStage",
+      "jsName": "Stage",
+      "tsName": "USDStage",
+      "methods": [
+        { "jsName": "GetRootLayer", "tsReturn": "USDLayer", "op": "stageRootLayerPointer" },
+        { "jsName": "GetPseudoRoot", "tsReturn": "USDPrim", "op": "direct", "cpp": "&pxr::UsdStage::GetPseudoRoot" },
+        { "jsName": "GetPrimAtPath", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "USDPrim", "op": "stageGetPrimAtPath" },
+        { "jsName": "Traverse", "tsReturn": "USDPrimVector", "op": "stageTraverse" },
+        { "jsName": "GetStartTimeCode", "tsReturn": "number", "op": "direct", "cpp": "&pxr::UsdStage::GetStartTimeCode" },
+        { "jsName": "GetEndTimeCode", "tsReturn": "number", "op": "direct", "cpp": "&pxr::UsdStage::GetEndTimeCode" },
+        { "jsName": "GetTimeCodesPerSecond", "tsReturn": "number", "op": "direct", "cpp": "&pxr::UsdStage::GetTimeCodesPerSecond" },
+        { "jsName": "GetUpAxis", "tsReturn": "number", "op": "stageUpAxis" }
+      ]
+    }
+  ],
+  "vectors": [
+    { "cppType": "int", "jsName": "VectorInt", "tsName": "IntVector", "elementType": "number" },
+    { "cppType": "double", "jsName": "VectorDouble", "tsName": "DoubleVector", "elementType": "number" },
+    { "cppType": "std::string", "jsName": "VectorString", "tsName": "StringVector", "elementType": "string" },
+    { "cppType": "pxr::UsdPrim", "jsName": "VectorPrim", "tsName": "USDPrimVector", "elementType": "USDPrim" }
+  ]
+}

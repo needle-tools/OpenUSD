@@ -7,6 +7,33 @@ if (NOT PXR_BUILD_HD_EMSCRIPTEN)
 endif()
 
 set(BINDINGS_NAME "emHdBindings")
+set(HD_EMSCRIPTEN_BINDGEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bindgen")
+set(HD_EMSCRIPTEN_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(HD_EMSCRIPTEN_CORE_BINDINGS_INC "${HD_EMSCRIPTEN_GENERATED_DIR}/emHdCoreBindings.inc")
+set(HD_EMSCRIPTEN_CORE_BINDINGS_DTS "${HD_EMSCRIPTEN_GENERATED_DIR}/usd-core-bindings.d.ts")
+if(PYTHON_EXECUTABLE)
+    set(HD_EMSCRIPTEN_PYTHON_EXECUTABLE "${PYTHON_EXECUTABLE}")
+else()
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    set(HD_EMSCRIPTEN_PYTHON_EXECUTABLE "${Python3_EXECUTABLE}")
+endif()
+
+add_custom_command(
+    OUTPUT
+        "${HD_EMSCRIPTEN_CORE_BINDINGS_INC}"
+        "${HD_EMSCRIPTEN_CORE_BINDINGS_DTS}"
+    COMMAND
+        "${HD_EMSCRIPTEN_PYTHON_EXECUTABLE}"
+        "${HD_EMSCRIPTEN_BINDGEN_DIR}/generate_bindings.py"
+        --manifest "${HD_EMSCRIPTEN_BINDGEN_DIR}/core-bindings.json"
+        --cpp-out "${HD_EMSCRIPTEN_CORE_BINDINGS_INC}"
+        --dts-out "${HD_EMSCRIPTEN_CORE_BINDINGS_DTS}"
+    DEPENDS
+        "${HD_EMSCRIPTEN_BINDGEN_DIR}/generate_bindings.py"
+        "${HD_EMSCRIPTEN_BINDGEN_DIR}/core-bindings.json"
+    COMMENT "Generating hdEmscripten core USD bindings"
+    VERBATIM
+)
 
 set(RESOURCE_PARAMETERS "")
 function(add_resources target)
@@ -98,12 +125,14 @@ endif()
 
 add_executable(${BINDINGS_NAME}
     emHdBindings.cpp
+    "${HD_EMSCRIPTEN_CORE_BINDINGS_INC}"
     webRenderDelegate.cpp
 )
 
 target_include_directories(${BINDINGS_NAME}
     PRIVATE
         "${PROJECT_BINARY_DIR}/include"
+        "${CMAKE_CURRENT_BINARY_DIR}"
 )
 
 _pxr_target_link_libraries(${BINDINGS_NAME}
@@ -146,4 +175,9 @@ install(
     FILES ${CMAKE_CURRENT_BINARY_DIR}/${BINDINGS_NAME}.worker.js
     DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
     OPTIONAL
+)
+
+install(
+    FILES "${HD_EMSCRIPTEN_CORE_BINDINGS_DTS}"
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/share/hdEmscripten
 )
