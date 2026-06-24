@@ -147,6 +147,14 @@ _pxr_target_link_libraries(${BINDINGS_NAME}
     ${PXR_MALLOC_LIBRARY}
 )
 
+if(EMSCRIPTEN)
+    target_link_options(${BINDINGS_NAME}
+        PRIVATE
+            "SHELL:-Wl,--whole-archive $<TARGET_FILE:usdShaders> $<TARGET_FILE:sdrGlslfx> -Wl,--no-whole-archive"
+    )
+    add_dependencies(${BINDINGS_NAME} usdShaders sdrGlslfx)
+endif()
+
 set_target_properties(${BINDINGS_NAME}
     PROPERTIES
         SUFFIX ".js"

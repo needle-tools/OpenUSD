@@ -503,10 +503,6 @@ public:
             HdMaterialNetworkMap const& hdNetworkMap =
                 vtMat.UncheckedGet<HdMaterialNetworkMap>();
 
-#if HD_EMSCRIPTEN_HAS_MATERIALX
-            _SendMaterialXDocument(hdNetworkMap);
-#endif
-
             for (auto& [networkId, network]: hdNetworkMap.map) {
                 for (auto& node : network.nodes) {
                     val parameters = val::object();
@@ -527,9 +523,9 @@ public:
                 for (auto &relationship : network.relationships) {
                     val relationshipObj = val::object();
                     relationshipObj.set("inputId", relationship.inputId.GetAsString());
-                    relationshipObj.set("inputName", relationship.inputName);
+                    relationshipObj.set("inputName", relationship.inputName.GetString());
                     relationshipObj.set("outputId", relationship.outputId.GetAsString());
-                    relationshipObj.set("outputName", relationship.outputName);
+                    relationshipObj.set("outputName", relationship.outputName.GetString());
                     relationships.set(i++, relationshipObj);
                 }
 
@@ -656,9 +652,6 @@ TfTokenVector
 WebRenderDelegate::GetMaterialRenderContexts() const
 {
     static const TfTokenVector renderContexts = {
-#if HD_EMSCRIPTEN_HAS_MATERIALX
-        TfToken("mtlx"),
-#endif
         TfToken()
     };
     return renderContexts;
@@ -667,13 +660,13 @@ WebRenderDelegate::GetMaterialRenderContexts() const
 TfTokenVector
 WebRenderDelegate::GetShaderSourceTypes() const
 {
-    return GetMaterialRenderContexts();
+    return TfTokenVector();
 }
 
 TfTokenVector
 WebRenderDelegate::GetShadingSystems() const
 {
-    return GetShaderSourceTypes();
+    return TfTokenVector();
 }
 
 HdRenderPassSharedPtr

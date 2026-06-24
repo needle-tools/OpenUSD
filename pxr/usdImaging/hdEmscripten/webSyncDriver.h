@@ -128,6 +128,9 @@ public:
     }
 
     void Draw() {
+        if (!_stage || !_delegate || !_geometryPass) {
+            return;
+        }
         _delegate->ApplyPendingUpdates();
         HdTaskSharedPtrVector tasks = {
             std::make_shared<WebSyncTask>(_geometryPass, _renderTags)
@@ -136,6 +139,10 @@ public:
     }
 
     void getFile(std::string filename, emscripten::val callback) {
+        if (!_stage) {
+            callback(emscripten::val::undefined());
+            return;
+        }
         auto& resolver = ArGetResolver();
         ArResolverContextBinder binder(&resolver, _stage->GetPathResolverContext());
 
@@ -155,10 +162,16 @@ public:
         callback(emscripten::val(emscripten::typed_memory_view(bufferSize, buffer.get())));
     }
     void SetTime(double time) {
+        if (!_delegate) {
+            return;
+        }
         _delegate->SetTime(time);
     }
 
     double GetTime() {
+        if (!_delegate) {
+            return 0.0;
+        }
         return _delegate->GetTime().GetValue();
     }
 
@@ -178,7 +191,14 @@ public:
         return _stage;
     }
 
+    bool HasStage() const {
+        return static_cast<bool>(_stage);
+    }
+
     int GetStageUpAxis() const {
+        if (!_stage) {
+            return 'y';
+        }
         const TfToken upAxis = UsdGeomGetStageUpAxis(_stage);
         return upAxis == UsdGeomTokens->z ? 'z' : 'y';
     }
@@ -213,9 +233,12 @@ private:
         _delegate = new UsdImagingDelegate(_renderIndex, delegateId);
 
         _stage = usdStage;
+        if (!_stage) {
+            TF_RUNTIME_ERROR("Failed to open USD stage for hdEmscripten driver");
+            return;
+        }
 
         UsdSkelBakeSkinning(_stage->Traverse());
-        _stage->Save();
         _delegate->Populate(_stage->GetPseudoRoot());
 
         _geometryPass = HdRenderPassSharedPtr(

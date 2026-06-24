@@ -37,6 +37,7 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
     .constructor<emscripten::val, std::string>()
     .function("Draw", &pxr::HdWebSyncDriver::Draw)
     .function("getFile", &pxr::HdWebSyncDriver::getFile)
+    .function("HasStage", &pxr::HdWebSyncDriver::HasStage)
     .function("GetStage", optional_override([](pxr::HdWebSyncDriver& driver) {
       return get_pointer(driver.GetStage());
     }), allow_raw_pointers())

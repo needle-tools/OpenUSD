@@ -204,7 +204,7 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
         // is there a way to make this always work?
         setBaseTempDir(tempDir.generic_string() + "/1/1/1/1/1/1/");
         auto filePath = baseTempDir + fullHttpRouteAsPath.filename().generic_string();
-        savedAssetFilePath = FetchAndSaveAsset(assetPath,
+        savedAssetFilePath = FetchAndSaveAsset(stringAssetPathCopy,
                                                filePath);
     }
     else if (!baseUrl.empty()){

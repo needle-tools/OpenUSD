@@ -342,6 +342,13 @@ function(_install_resource_files NAME pluginInstallPrefix pluginToLibraryPath)
                 set(resourceDestDir "${resourceDestDir}/${dirPath}")
             endif()
 
+            set(emscriptenResourceArg "--preload-file ${emscriptenResourceFile}@${resourceDestDir}/${destFileName}")
+            set_property(
+                TARGET ${NAME}
+                APPEND
+                PROPERTY EMSCRIPTEN_RESOURCES "${emscriptenResourceArg}"
+            )
+
             # Resources that are required for this library will be embedded in
             # the final Wasm output. For building internal binaries, we can use
             # the files from their location in the source tree. In order for
