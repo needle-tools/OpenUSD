@@ -8,6 +8,7 @@
         { "jsName": "GetIdentifier", "tsReturn": "string", "op": "direct", "cpp": "&pxr::SdfLayer::GetIdentifier" },
         { "jsName": "GetDisplayName", "tsReturn": "string", "op": "direct", "cpp": "&pxr::SdfLayer::GetDisplayName" },
         { "jsName": "ExportToString", "tsReturn": "string", "op": "layerExportToString" },
+        { "jsName": "Export", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "boolean", "op": "layerExport" },
         { "jsName": "Save", "tsReturn": "boolean", "op": "layerSave" }
       ]
     },
@@ -20,7 +21,15 @@
         { "jsName": "GetName", "tsReturn": "string", "op": "tokenString", "cpp": "GetName" },
         { "jsName": "GetPath", "tsReturn": "string", "op": "pathString", "cpp": "GetPath" },
         { "jsName": "GetTypeName", "tsReturn": "string", "op": "attributeTypeName" },
-        { "jsName": "GetValueString", "tsReturn": "string", "op": "attributeValueString" }
+        { "jsName": "GetValueString", "tsReturn": "string", "op": "attributeValueString" },
+        { "jsName": "GetValueStringAtTime", "tsArgs": [{ "name": "timeCode", "type": "number" }], "tsReturn": "string", "op": "attributeValueStringAtTime" },
+        { "jsName": "SetBool", "tsArgs": [{ "name": "value", "type": "boolean" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetBool" },
+        { "jsName": "SetInt", "tsArgs": [{ "name": "value", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetInt" },
+        { "jsName": "SetFloat", "tsArgs": [{ "name": "value", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetFloat" },
+        { "jsName": "SetDouble", "tsArgs": [{ "name": "value", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetDouble" },
+        { "jsName": "SetString", "tsArgs": [{ "name": "value", "type": "string" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetString" },
+        { "jsName": "SetToken", "tsArgs": [{ "name": "value", "type": "string" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetToken" },
+        { "jsName": "SetColor3f", "tsArgs": [{ "name": "r", "type": "number" }, { "name": "g", "type": "number" }, { "name": "b", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetColor3f" }
       ]
     },
     {
@@ -51,7 +60,15 @@
         { "jsName": "GetChildren", "tsReturn": "USDPrimVector", "op": "primChildren" },
         { "jsName": "GetPropertyNames", "tsReturn": "StringVector", "op": "tokenVectorString", "cpp": "GetPropertyNames" },
         { "jsName": "GetAttribute", "tsArgs": [{ "name": "name", "type": "string" }], "tsReturn": "USDAttribute", "op": "primGetAttribute" },
-        { "jsName": "GetRelationship", "tsArgs": [{ "name": "name", "type": "string" }], "tsReturn": "USDRelationship", "op": "primGetRelationship" }
+        { "jsName": "CreateAttribute", "tsArgs": [{ "name": "name", "type": "string" }, { "name": "typeName", "type": "string" }, { "name": "custom", "type": "boolean" }], "tsReturn": "USDAttribute", "op": "primCreateAttribute" },
+        { "jsName": "GetRelationship", "tsArgs": [{ "name": "name", "type": "string" }], "tsReturn": "USDRelationship", "op": "primGetRelationship" },
+        { "jsName": "AddVariant", "tsArgs": [{ "name": "variantSetName", "type": "string" }, { "name": "variantName", "type": "string" }], "tsReturn": "boolean", "op": "primAddVariant" },
+        { "jsName": "SetVariantSelection", "tsArgs": [{ "name": "variantSetName", "type": "string" }, { "name": "variantName", "type": "string" }], "tsReturn": "boolean", "op": "primSetVariantSelection" },
+        { "jsName": "GetVariantSelection", "tsArgs": [{ "name": "variantSetName", "type": "string" }], "tsReturn": "string", "op": "primGetVariantSelection" },
+        { "jsName": "ClearVariantSelection", "tsArgs": [{ "name": "variantSetName", "type": "string" }], "tsReturn": "boolean", "op": "primClearVariantSelection" },
+        { "jsName": "BlockVariantSelection", "tsArgs": [{ "name": "variantSetName", "type": "string" }], "tsReturn": "boolean", "op": "primBlockVariantSelection" },
+        { "jsName": "GetVariantNames", "tsArgs": [{ "name": "variantSetName", "type": "string" }], "tsReturn": "StringVector", "op": "primGetVariantNames" },
+        { "jsName": "DefinePrimInVariant", "tsArgs": [{ "name": "variantSetName", "type": "string" }, { "name": "variantName", "type": "string" }, { "name": "path", "type": "string" }, { "name": "typeName", "type": "string" }], "tsReturn": "USDPrim", "op": "primDefinePrimInVariant" }
       ]
     },
     {
@@ -62,11 +79,18 @@
         { "jsName": "GetRootLayer", "tsReturn": "USDLayer", "op": "stageRootLayerPointer" },
         { "jsName": "GetPseudoRoot", "tsReturn": "USDPrim", "op": "direct", "cpp": "&pxr::UsdStage::GetPseudoRoot" },
         { "jsName": "GetPrimAtPath", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "USDPrim", "op": "stageGetPrimAtPath" },
+        { "jsName": "DefinePrim", "tsArgs": [{ "name": "path", "type": "string" }, { "name": "typeName", "type": "string" }], "tsReturn": "USDPrim", "op": "stageDefinePrim" },
         { "jsName": "Traverse", "tsReturn": "USDPrimVector", "op": "stageTraverse" },
         { "jsName": "GetStartTimeCode", "tsReturn": "number", "op": "direct", "cpp": "&pxr::UsdStage::GetStartTimeCode" },
         { "jsName": "GetEndTimeCode", "tsReturn": "number", "op": "direct", "cpp": "&pxr::UsdStage::GetEndTimeCode" },
         { "jsName": "GetTimeCodesPerSecond", "tsReturn": "number", "op": "direct", "cpp": "&pxr::UsdStage::GetTimeCodesPerSecond" },
-        { "jsName": "GetUpAxis", "tsReturn": "number", "op": "stageUpAxis" }
+        { "jsName": "SetStartTimeCode", "tsArgs": [{ "name": "timeCode", "type": "number" }], "tsReturn": "void", "op": "direct", "cpp": "&pxr::UsdStage::SetStartTimeCode" },
+        { "jsName": "SetEndTimeCode", "tsArgs": [{ "name": "timeCode", "type": "number" }], "tsReturn": "void", "op": "direct", "cpp": "&pxr::UsdStage::SetEndTimeCode" },
+        { "jsName": "SetTimeCodesPerSecond", "tsArgs": [{ "name": "timeCodesPerSecond", "type": "number" }], "tsReturn": "void", "op": "direct", "cpp": "&pxr::UsdStage::SetTimeCodesPerSecond" },
+        { "jsName": "GetUpAxis", "tsReturn": "number", "op": "stageUpAxis" },
+        { "jsName": "SetUpAxis", "tsArgs": [{ "name": "upAxis", "type": "string" }], "tsReturn": "boolean", "op": "stageSetUpAxis" },
+        { "jsName": "Export", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "boolean", "op": "stageExport" },
+        { "jsName": "ExportToString", "tsReturn": "string", "op": "stageExportToString" }
       ]
     }
   ],
@@ -75,5 +99,12 @@
     { "cppType": "double", "jsName": "VectorDouble", "tsName": "DoubleVector", "elementType": "number" },
     { "cppType": "std::string", "jsName": "VectorString", "tsName": "StringVector", "elementType": "string" },
     { "cppType": "pxr::UsdPrim", "jsName": "VectorPrim", "tsName": "USDPrimVector", "elementType": "USDPrim" }
+  ],
+  "functions": [
+    { "jsName": "CreateStage", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "USDStage", "op": "createStage" },
+    { "jsName": "OpenStage", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "USDStage", "op": "openStage" },
+    { "jsName": "ReleaseStage", "tsArgs": [{ "name": "stage", "type": "USDStage" }], "tsReturn": "boolean", "op": "releaseStage" },
+    { "jsName": "CreateUsdzPackage", "tsArgs": [{ "name": "assetPath", "type": "string" }, { "name": "usdzPath", "type": "string" }], "tsReturn": "boolean", "op": "createUsdzPackage" },
+    { "jsName": "ReadFile", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "Uint8Array", "op": "readFile" }
   ]
 }

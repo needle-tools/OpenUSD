@@ -62,6 +62,9 @@ The Node smoke test verifies:
 
 - `HdWebSyncDriver`
 - `HdWebSyncDriver.GetStage()` and basic `Stage`/`Prim`/`Layer` APIs
+- generated stage authoring APIs (`CreateStage`, `OpenStage`, `ReleaseStage`)
+- generated prim, attribute, variant, and time-sample authoring APIs
+- USDZ package creation and byte readback for browser download handoff
 - `FS_createDataFile`
 - `FS_createPath`
 - `FS_analyzePath`
@@ -89,8 +92,9 @@ Observed result:
 - `usdMtlx` builds for wasm.
 - `hdMtlx` builds for wasm.
 - `emHdBindings` links and installs with `PXR_ENABLE_MATERIALX_SUPPORT=ON`.
+- The build script uses `cmake --build ... --target install`, not raw `cmake --install` after a partial build, so install dependencies such as `usdShaders` are built before install rules run.
 - The wasm render delegate advertises `mtlx` as a material render context and shader source type, so OpenUSD creates real Hydra material sprims for MaterialX-authored materials.
-- `wasm-hydra-bindings-node.sh` passes against `/Users/herbst/OpenUSD-26.05-wasm-hydra-mtlx-probe`.
+- `wasm-hydra-bindings-node.sh` passes against `/Users/herbst/OpenUSD-26.05-wasm-hydra-mtlx-probe`, including generated authoring, variants, animated attributes, USDA export, USDZ package creation, and binary readback.
 - The installed `usdMtlx` resources contain 56 `.mtlx` library files, including `gltf_pbr.mtlx`, `open_pbr_surface.mtlx`, and `usd_preview_surface.mtlx`.
 - The MaterialX-enabled installed sidecars are approximately `190K` for `emHdBindings.js`, `2.2M` for `emHdBindings.data`, and `29M` for `emHdBindings.wasm`.
 

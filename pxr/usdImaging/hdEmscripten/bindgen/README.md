@@ -8,7 +8,11 @@ wasm Hydra bridge. `generate_bindings.py` emits both:
 
 The generator deliberately covers the core object model used by `usd-viewer`
 today: `SdfLayer`, `UsdStage`, `UsdPrim`, `UsdAttribute`, `UsdRelationship`, and
-their vector helpers. The bridge-specific `HdWebSyncDriver` binding remains in
+their vector helpers. It also exposes the first authoring/package checkpoint:
+stage creation/opening/release, prim definition, typed attribute setters with
+time samples, variant add/list/select helpers, selected-variant prim authoring,
+USDA export, USDZ package creation, and binary readback for browser download
+handoff. The bridge-specific `HdWebSyncDriver` binding remains in
 `emHdBindings.cpp` because it is the render transport API, not a USD API.
 
 Run it manually from the OpenUSD repository with:

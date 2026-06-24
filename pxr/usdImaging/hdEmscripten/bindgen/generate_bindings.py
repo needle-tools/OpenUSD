@@ -39,6 +39,30 @@ def _lambda(cpp_type: str, method: dict) -> tuple[str, bool]:
       }
       return pxr::TfStringify(value);
     })""", False
+    if op == "attributeValueStringAtTime":
+        return """emscripten::optional_override([](pxr::UsdAttribute const& attr, double timeCode) {
+      pxr::VtValue value;
+      if (!attr.Get(&value, pxr::UsdTimeCode(timeCode))) {
+        return std::string();
+      }
+      return pxr::TfStringify(value);
+    })""", False
+    if op == "attributeSetBool":
+        return "emscripten::optional_override([](pxr::UsdAttribute const& attr, bool value, double timeCode) { return attr.Set(value, _TimeCode(timeCode)); })", False
+    if op == "attributeSetInt":
+        return "emscripten::optional_override([](pxr::UsdAttribute const& attr, int value, double timeCode) { return attr.Set(value, _TimeCode(timeCode)); })", False
+    if op == "attributeSetFloat":
+        return "emscripten::optional_override([](pxr::UsdAttribute const& attr, float value, double timeCode) { return attr.Set(value, _TimeCode(timeCode)); })", False
+    if op == "attributeSetDouble":
+        return "emscripten::optional_override([](pxr::UsdAttribute const& attr, double value, double timeCode) { return attr.Set(value, _TimeCode(timeCode)); })", False
+    if op == "attributeSetString":
+        return "emscripten::optional_override([](pxr::UsdAttribute const& attr, std::string const& value, double timeCode) { return attr.Set(value, _TimeCode(timeCode)); })", False
+    if op == "attributeSetToken":
+        return "emscripten::optional_override([](pxr::UsdAttribute const& attr, std::string const& value, double timeCode) { return attr.Set(pxr::TfToken(value), _TimeCode(timeCode)); })", False
+    if op == "attributeSetColor3f":
+        return """emscripten::optional_override([](pxr::UsdAttribute const& attr, float r, float g, float b, double timeCode) {
+      return attr.Set(pxr::GfVec3f(r, g, b), _TimeCode(timeCode));
+    })""", False
     if op == "relationshipTargets":
         return """emscripten::optional_override([](pxr::UsdRelationship const& rel) {
       pxr::SdfPathVector targets;
@@ -59,6 +83,8 @@ def _lambda(cpp_type: str, method: dict) -> tuple[str, bool]:
     })""", False
     if op == "layerSave":
         return "emscripten::optional_override([](pxr::SdfLayer& layer) { return layer.Save(); })", False
+    if op == "layerExport":
+        return "emscripten::optional_override([](pxr::SdfLayer& layer, std::string const& path) { return layer.Export(path); })", False
     if op == "primChildren":
         return """emscripten::optional_override([](pxr::UsdPrim const& prim) {
       std::vector<pxr::UsdPrim> result;
@@ -83,6 +109,43 @@ def _lambda(cpp_type: str, method: dict) -> tuple[str, bool]:
         return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& name) {
       return prim.GetRelationship(pxr::TfToken(name));
     })""", False
+    if op == "primCreateAttribute":
+        return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& name, std::string const& typeName, bool custom) {
+      return prim.CreateAttribute(pxr::TfToken(name), _FindValueTypeName(typeName), custom);
+    })""", False
+    if op == "primAddVariant":
+        return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& variantSetName, std::string const& variantName) {
+      return prim.GetVariantSet(variantSetName).AddVariant(variantName);
+    })""", False
+    if op == "primSetVariantSelection":
+        return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& variantSetName, std::string const& variantName) {
+      return prim.GetVariantSet(variantSetName).SetVariantSelection(variantName);
+    })""", False
+    if op == "primGetVariantSelection":
+        return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& variantSetName) {
+      return prim.GetVariantSet(variantSetName).GetVariantSelection();
+    })""", False
+    if op == "primClearVariantSelection":
+        return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& variantSetName) {
+      return prim.GetVariantSet(variantSetName).ClearVariantSelection();
+    })""", False
+    if op == "primBlockVariantSelection":
+        return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& variantSetName) {
+      return prim.GetVariantSet(variantSetName).BlockVariantSelection();
+    })""", False
+    if op == "primGetVariantNames":
+        return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& variantSetName) {
+      return prim.GetVariantSet(variantSetName).GetVariantNames();
+    })""", False
+    if op == "primDefinePrimInVariant":
+        return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& variantSetName, std::string const& variantName, std::string const& path, std::string const& typeName) {
+      pxr::UsdVariantSet variantSet = prim.GetVariantSet(variantSetName);
+      if (!variantSet.AddVariant(variantName) || !variantSet.SetVariantSelection(variantName)) {
+        return pxr::UsdPrim();
+      }
+      pxr::UsdEditContext context(variantSet.GetVariantEditContext());
+      return prim.GetStage()->DefinePrim(pxr::SdfPath(path), pxr::TfToken(typeName));
+    })""", False
     if op == "stageRootLayerPointer":
         return """emscripten::optional_override([](pxr::UsdStage& stage) {
       return get_pointer(stage.GetRootLayer());
@@ -90,6 +153,10 @@ def _lambda(cpp_type: str, method: dict) -> tuple[str, bool]:
     if op == "stageGetPrimAtPath":
         return """emscripten::optional_override([](pxr::UsdStage& stage, std::string const& path) {
       return stage.GetPrimAtPath(pxr::SdfPath(path));
+    })""", False
+    if op == "stageDefinePrim":
+        return """emscripten::optional_override([](pxr::UsdStage& stage, std::string const& path, std::string const& typeName) {
+      return stage.DefinePrim(pxr::SdfPath(path), pxr::TfToken(typeName));
     })""", False
     if op == "stageTraverse":
         return """emscripten::optional_override([](pxr::UsdStage& stage) {
@@ -109,8 +176,61 @@ def _lambda(cpp_type: str, method: dict) -> tuple[str, bool]:
       }
       return upAxis == pxr::UsdGeomTokens->z ? 'z' : 'y';
     })""", False
+    if op == "stageSetUpAxis":
+        return """emscripten::optional_override([](pxr::UsdStage& stage, std::string const& upAxis) {
+      return pxr::UsdGeomSetStageUpAxis(pxr::UsdStageWeakPtr(&stage), upAxis == "Z" || upAxis == "z" ? pxr::UsdGeomTokens->z : pxr::UsdGeomTokens->y);
+    })""", False
+    if op == "stageExport":
+        return "emscripten::optional_override([](pxr::UsdStage& stage, std::string const& path) { return stage.Export(path); })", False
+    if op == "stageExportToString":
+        return """emscripten::optional_override([](pxr::UsdStage& stage) {
+      std::string result;
+      stage.ExportToString(&result);
+      return result;
+    })""", False
 
     raise ValueError(f"Unsupported op: {op}")
+
+
+def _function_expr(function: dict) -> tuple[str, bool]:
+    op = function["op"]
+    if op == "createStage":
+        return """emscripten::optional_override([](std::string const& path) {
+      pxr::UsdStageRefPtr stage = pxr::UsdStage::CreateNew(path);
+      _StageRegistry().push_back(stage);
+      return get_pointer(stage);
+    })""", True
+    if op == "openStage":
+        return """emscripten::optional_override([](std::string const& path) {
+      pxr::UsdStageRefPtr stage = pxr::UsdStage::Open(path);
+      _StageRegistry().push_back(stage);
+      return get_pointer(stage);
+    })""", True
+    if op == "releaseStage":
+        return """emscripten::optional_override([](pxr::UsdStage& stage) {
+      std::vector<pxr::UsdStageRefPtr>& stages = _StageRegistry();
+      for (auto it = stages.begin(); it != stages.end(); ++it) {
+        if (get_pointer(*it) == &stage) {
+          stages.erase(it);
+          return true;
+        }
+      }
+      return false;
+    })""", False
+    if op == "createUsdzPackage":
+        return """emscripten::optional_override([](std::string const& assetPath, std::string const& usdzPath) {
+      return pxr::UsdUtilsCreateNewUsdzPackage(pxr::SdfAssetPath(assetPath), usdzPath);
+    })""", False
+    if op == "readFile":
+        return """emscripten::optional_override([](std::string const& path) {
+      std::ifstream input(path, std::ios::binary);
+      if (!input) {
+        return emscripten::val::global("Uint8Array").new_(0);
+      }
+      std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+      return emscripten::val::global("Uint8Array").new_(emscripten::typed_memory_view(bytes.size(), bytes.data()));
+    })""", False
+    raise ValueError(f"Unsupported function op: {op}")
 
 
 def generate_cpp(manifest: dict) -> str:
@@ -119,6 +239,22 @@ def generate_cpp(manifest: dict) -> str:
         "// Do not edit by hand; edit bindgen/core-bindings.json instead.",
         "",
         "namespace pxr { namespace hdEmscriptenGenerated {",
+        "",
+        "UsdTimeCode _TimeCode(double timeCode)",
+        "{",
+        "  return std::isnan(timeCode) ? UsdTimeCode::Default() : UsdTimeCode(timeCode);",
+        "}",
+        "",
+        "SdfValueTypeName _FindValueTypeName(std::string const& typeName)",
+        "{",
+        "  return SdfSchema::GetInstance().FindType(typeName);",
+        "}",
+        "",
+        "std::vector<UsdStageRefPtr>& _StageRegistry()",
+        "{",
+        "  static std::vector<UsdStageRefPtr> stages;",
+        "  return stages;",
+        "}",
         "",
         "void RegisterUsdCoreBindings()",
         "{",
@@ -137,6 +273,13 @@ def generate_cpp(manifest: dict) -> str:
 
     for vector in manifest.get("vectors", []):
         lines.append(f"  register_vector<{vector['cppType']}>(\"{vector['jsName']}\");")
+
+    if manifest.get("functions"):
+        lines.append("")
+    for function in manifest.get("functions", []):
+        expr, allow_raw = _function_expr(function)
+        suffix = ", allow_raw_pointers()" if allow_raw else ""
+        lines.append(f"  function(\"{function['jsName']}\", {expr}{suffix});")
 
     lines.extend([
         "}",
@@ -168,6 +311,8 @@ def generate_dts(manifest: dict) -> str:
             lines.append(f"    {method['jsName']}({_args(method)}): {method['tsReturn']},")
         lines.append("}")
         lines.append("")
+    for function in manifest.get("functions", []):
+        lines.append(f"declare function {function['jsName']}({_args(function)}): {function['tsReturn']}")
     return "\n".join(lines)
 
 

@@ -3,17 +3,27 @@
 #include "webSyncDriver.h"
 
 #include "pxr/base/tf/stringUtils.h"
+#include "pxr/base/gf/vec3f.h"
+#include "pxr/usd/sdf/assetPath.h"
 #include "pxr/usd/sdf/layer.h"
 #include "pxr/usd/sdf/path.h"
+#include "pxr/usd/sdf/schema.h"
+#include "pxr/usd/sdf/types.h"
 #include "pxr/usd/usd/attribute.h"
+#include "pxr/usd/usd/editContext.h"
 #include "pxr/usd/usd/prim.h"
 #include "pxr/usd/usd/relationship.h"
 #include "pxr/usd/usd/stage.h"
 #include "pxr/usd/usd/timeCode.h"
+#include "pxr/usd/usd/variantSets.h"
 #include "pxr/usd/usdGeom/metrics.h"
 #include "pxr/usd/usdGeom/tokens.h"
+#include "pxr/usd/usdUtils/usdzPackage.h"
 
 #include <emscripten/bind.h>
+#include <cmath>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 using namespace emscripten;
