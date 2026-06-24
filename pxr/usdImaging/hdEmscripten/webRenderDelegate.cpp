@@ -503,6 +503,10 @@ public:
             HdMaterialNetworkMap const& hdNetworkMap =
                 vtMat.UncheckedGet<HdMaterialNetworkMap>();
 
+#if HD_EMSCRIPTEN_HAS_MATERIALX
+            _SendMaterialXDocument(hdNetworkMap);
+#endif
+
             for (auto& [networkId, network]: hdNetworkMap.map) {
                 for (auto& node : network.nodes) {
                     val parameters = val::object();
@@ -555,6 +559,9 @@ private:
         for (auto const& terminal : hdNetwork.terminals) {
             auto const nodeIt = hdNetwork.nodes.find(terminal.second.upstreamNode);
             if (nodeIt == hdNetwork.nodes.end()) {
+                continue;
+            }
+            if (nodeIt->second.nodeTypeId == TfToken("UsdPreviewSurface")) {
                 continue;
             }
 
@@ -652,6 +659,9 @@ TfTokenVector
 WebRenderDelegate::GetMaterialRenderContexts() const
 {
     static const TfTokenVector renderContexts = {
+#if HD_EMSCRIPTEN_HAS_MATERIALX
+        TfToken("mtlx"),
+#endif
         TfToken()
     };
     return renderContexts;
@@ -660,13 +670,13 @@ WebRenderDelegate::GetMaterialRenderContexts() const
 TfTokenVector
 WebRenderDelegate::GetShaderSourceTypes() const
 {
-    return TfTokenVector();
+    return GetMaterialRenderContexts();
 }
 
 TfTokenVector
 WebRenderDelegate::GetShadingSystems() const
 {
-    return TfTokenVector();
+    return GetShaderSourceTypes();
 }
 
 HdRenderPassSharedPtr

@@ -29,7 +29,11 @@
         { "jsName": "SetDouble", "tsArgs": [{ "name": "value", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetDouble" },
         { "jsName": "SetString", "tsArgs": [{ "name": "value", "type": "string" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetString" },
         { "jsName": "SetToken", "tsArgs": [{ "name": "value", "type": "string" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetToken" },
-        { "jsName": "SetColor3f", "tsArgs": [{ "name": "r", "type": "number" }, { "name": "g", "type": "number" }, { "name": "b", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetColor3f" }
+        { "jsName": "AddConnection", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "boolean", "op": "attributeAddConnection" },
+        { "jsName": "SetColor3f", "tsArgs": [{ "name": "r", "type": "number" }, { "name": "g", "type": "number" }, { "name": "b", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetColor3f" },
+        { "jsName": "SetVec3f", "tsArgs": [{ "name": "x", "type": "number" }, { "name": "y", "type": "number" }, { "name": "z", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetVec3f" },
+        { "jsName": "SetVec3d", "tsArgs": [{ "name": "x", "type": "number" }, { "name": "y", "type": "number" }, { "name": "z", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetVec3d" },
+        { "jsName": "SetMatrix4d", "tsArgs": [{ "name": "m00", "type": "number" }, { "name": "m01", "type": "number" }, { "name": "m02", "type": "number" }, { "name": "m03", "type": "number" }, { "name": "m10", "type": "number" }, { "name": "m11", "type": "number" }, { "name": "m12", "type": "number" }, { "name": "m13", "type": "number" }, { "name": "m20", "type": "number" }, { "name": "m21", "type": "number" }, { "name": "m22", "type": "number" }, { "name": "m23", "type": "number" }, { "name": "m30", "type": "number" }, { "name": "m31", "type": "number" }, { "name": "m32", "type": "number" }, { "name": "m33", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetMatrix4d" }
       ]
     },
     {
@@ -40,7 +44,9 @@
         { "jsName": "IsValid", "tsReturn": "boolean", "op": "boolOperator" },
         { "jsName": "GetName", "tsReturn": "string", "op": "tokenString", "cpp": "GetName" },
         { "jsName": "GetPath", "tsReturn": "string", "op": "pathString", "cpp": "GetPath" },
-        { "jsName": "GetTargets", "tsReturn": "StringVector", "op": "relationshipTargets" }
+        { "jsName": "GetTargets", "tsReturn": "StringVector", "op": "relationshipTargets" },
+        { "jsName": "AddTarget", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "boolean", "op": "relationshipAddTarget" },
+        { "jsName": "ClearTargets", "tsArgs": [{ "name": "removeSpec", "type": "boolean" }], "tsReturn": "boolean", "op": "relationshipClearTargets" }
       ]
     },
     {
@@ -54,6 +60,7 @@
         { "jsName": "GetTypeName", "tsReturn": "string", "op": "tokenString", "cpp": "GetTypeName" },
         { "jsName": "IsActive", "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::IsActive" },
         { "jsName": "SetActive", "tsArgs": [{ "name": "active", "type": "boolean" }], "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::SetActive" },
+        { "jsName": "ApplyAPI", "tsArgs": [{ "name": "schemaIdentifier", "type": "string" }], "tsReturn": "boolean", "op": "primApplyAPI" },
         { "jsName": "IsDefined", "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::IsDefined" },
         { "jsName": "IsLoaded", "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::IsLoaded" },
         { "jsName": "GetParent", "tsReturn": "USDPrim", "op": "direct", "cpp": "&pxr::UsdPrim::GetParent" },
@@ -62,6 +69,7 @@
         { "jsName": "GetAttribute", "tsArgs": [{ "name": "name", "type": "string" }], "tsReturn": "USDAttribute", "op": "primGetAttribute" },
         { "jsName": "CreateAttribute", "tsArgs": [{ "name": "name", "type": "string" }, { "name": "typeName", "type": "string" }, { "name": "custom", "type": "boolean" }], "tsReturn": "USDAttribute", "op": "primCreateAttribute" },
         { "jsName": "GetRelationship", "tsArgs": [{ "name": "name", "type": "string" }], "tsReturn": "USDRelationship", "op": "primGetRelationship" },
+        { "jsName": "CreateRelationship", "tsArgs": [{ "name": "name", "type": "string" }, { "name": "custom", "type": "boolean" }], "tsReturn": "USDRelationship", "op": "primCreateRelationship" },
         { "jsName": "AddVariant", "tsArgs": [{ "name": "variantSetName", "type": "string" }, { "name": "variantName", "type": "string" }], "tsReturn": "boolean", "op": "primAddVariant" },
         { "jsName": "SetVariantSelection", "tsArgs": [{ "name": "variantSetName", "type": "string" }, { "name": "variantName", "type": "string" }], "tsReturn": "boolean", "op": "primSetVariantSelection" },
         { "jsName": "GetVariantSelection", "tsArgs": [{ "name": "variantSetName", "type": "string" }], "tsReturn": "string", "op": "primGetVariantSelection" },

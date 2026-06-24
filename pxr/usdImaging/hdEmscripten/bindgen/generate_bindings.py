@@ -59,9 +59,34 @@ def _lambda(cpp_type: str, method: dict) -> tuple[str, bool]:
         return "emscripten::optional_override([](pxr::UsdAttribute const& attr, std::string const& value, double timeCode) { return attr.Set(value, _TimeCode(timeCode)); })", False
     if op == "attributeSetToken":
         return "emscripten::optional_override([](pxr::UsdAttribute const& attr, std::string const& value, double timeCode) { return attr.Set(pxr::TfToken(value), _TimeCode(timeCode)); })", False
+    if op == "attributeAddConnection":
+        return """emscripten::optional_override([](pxr::UsdAttribute const& attr, std::string const& path) {
+      return attr.AddConnection(pxr::SdfPath(path));
+    })""", False
     if op == "attributeSetColor3f":
         return """emscripten::optional_override([](pxr::UsdAttribute const& attr, float r, float g, float b, double timeCode) {
       return attr.Set(pxr::GfVec3f(r, g, b), _TimeCode(timeCode));
+    })""", False
+    if op == "attributeSetVec3f":
+        return """emscripten::optional_override([](pxr::UsdAttribute const& attr, float x, float y, float z, double timeCode) {
+      return attr.Set(pxr::GfVec3f(x, y, z), _TimeCode(timeCode));
+    })""", False
+    if op == "attributeSetVec3d":
+        return """emscripten::optional_override([](pxr::UsdAttribute const& attr, double x, double y, double z, double timeCode) {
+      return attr.Set(pxr::GfVec3d(x, y, z), _TimeCode(timeCode));
+    })""", False
+    if op == "attributeSetMatrix4d":
+        return """emscripten::optional_override([](pxr::UsdAttribute const& attr,
+      double m00, double m01, double m02, double m03,
+      double m10, double m11, double m12, double m13,
+      double m20, double m21, double m22, double m23,
+      double m30, double m31, double m32, double m33,
+      double timeCode) {
+      return attr.Set(pxr::GfMatrix4d(
+        m00, m01, m02, m03,
+        m10, m11, m12, m13,
+        m20, m21, m22, m23,
+        m30, m31, m32, m33), _TimeCode(timeCode));
     })""", False
     if op == "relationshipTargets":
         return """emscripten::optional_override([](pxr::UsdRelationship const& rel) {
@@ -74,6 +99,14 @@ def _lambda(cpp_type: str, method: dict) -> tuple[str, bool]:
         }
       }
       return result;
+    })""", False
+    if op == "relationshipAddTarget":
+        return """emscripten::optional_override([](pxr::UsdRelationship const& rel, std::string const& path) {
+      return rel.AddTarget(pxr::SdfPath(path));
+    })""", False
+    if op == "relationshipClearTargets":
+        return """emscripten::optional_override([](pxr::UsdRelationship const& rel, bool removeSpec) {
+      return rel.ClearTargets(removeSpec);
     })""", False
     if op == "layerExportToString":
         return """emscripten::optional_override([](pxr::SdfLayer& layer) {
@@ -108,6 +141,14 @@ def _lambda(cpp_type: str, method: dict) -> tuple[str, bool]:
     if op == "primGetRelationship":
         return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& name) {
       return prim.GetRelationship(pxr::TfToken(name));
+    })""", False
+    if op == "primCreateRelationship":
+        return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& name, bool custom) {
+      return prim.CreateRelationship(pxr::TfToken(name), custom);
+    })""", False
+    if op == "primApplyAPI":
+        return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& schemaIdentifier) {
+      return prim.ApplyAPI(pxr::TfToken(schemaIdentifier));
     })""", False
     if op == "primCreateAttribute":
         return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& name, std::string const& typeName, bool custom) {
