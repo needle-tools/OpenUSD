@@ -13,6 +13,7 @@
 #include "pxr/usd/sdf/types.h"
 #include "pxr/usd/usd/attribute.h"
 #include "pxr/usd/usd/editContext.h"
+#include "pxr/usd/usd/payloads.h"
 #include "pxr/usd/usd/prim.h"
 #include "pxr/usd/usd/relationship.h"
 #include "pxr/usd/usd/stage.h"

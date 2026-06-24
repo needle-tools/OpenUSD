@@ -63,6 +63,10 @@
         { "jsName": "ApplyAPI", "tsArgs": [{ "name": "schemaIdentifier", "type": "string" }], "tsReturn": "boolean", "op": "primApplyAPI" },
         { "jsName": "IsDefined", "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::IsDefined" },
         { "jsName": "IsLoaded", "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::IsLoaded" },
+        { "jsName": "HasAuthoredPayloads", "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::HasAuthoredPayloads" },
+        { "jsName": "Load", "tsReturn": "void", "op": "primLoad" },
+        { "jsName": "Unload", "tsReturn": "void", "op": "primUnload" },
+        { "jsName": "AddPayload", "tsArgs": [{ "name": "assetPath", "type": "string" }, { "name": "primPath", "type": "string" }], "tsReturn": "boolean", "op": "primAddPayload" },
         { "jsName": "GetParent", "tsReturn": "USDPrim", "op": "direct", "cpp": "&pxr::UsdPrim::GetParent" },
         { "jsName": "GetChildren", "tsReturn": "USDPrimVector", "op": "primChildren" },
         { "jsName": "GetPropertyNames", "tsReturn": "StringVector", "op": "tokenVectorString", "cpp": "GetPropertyNames" },
@@ -75,6 +79,7 @@
         { "jsName": "GetVariantSelection", "tsArgs": [{ "name": "variantSetName", "type": "string" }], "tsReturn": "string", "op": "primGetVariantSelection" },
         { "jsName": "ClearVariantSelection", "tsArgs": [{ "name": "variantSetName", "type": "string" }], "tsReturn": "boolean", "op": "primClearVariantSelection" },
         { "jsName": "BlockVariantSelection", "tsArgs": [{ "name": "variantSetName", "type": "string" }], "tsReturn": "boolean", "op": "primBlockVariantSelection" },
+        { "jsName": "GetVariantSetNames", "tsReturn": "StringVector", "op": "primGetVariantSetNames" },
         { "jsName": "GetVariantNames", "tsArgs": [{ "name": "variantSetName", "type": "string" }], "tsReturn": "StringVector", "op": "primGetVariantNames" },
         { "jsName": "DefinePrimInVariant", "tsArgs": [{ "name": "variantSetName", "type": "string" }, { "name": "variantName", "type": "string" }, { "name": "path", "type": "string" }, { "name": "typeName", "type": "string" }], "tsReturn": "USDPrim", "op": "primDefinePrimInVariant" }
       ]
@@ -89,6 +94,7 @@
         { "jsName": "GetPrimAtPath", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "USDPrim", "op": "stageGetPrimAtPath" },
         { "jsName": "DefinePrim", "tsArgs": [{ "name": "path", "type": "string" }, { "name": "typeName", "type": "string" }], "tsReturn": "USDPrim", "op": "stageDefinePrim" },
         { "jsName": "Traverse", "tsReturn": "USDPrimVector", "op": "stageTraverse" },
+        { "jsName": "TraverseAll", "tsReturn": "USDPrimVector", "op": "stageTraverseAll" },
         { "jsName": "GetStartTimeCode", "tsReturn": "number", "op": "direct", "cpp": "&pxr::UsdStage::GetStartTimeCode" },
         { "jsName": "GetEndTimeCode", "tsReturn": "number", "op": "direct", "cpp": "&pxr::UsdStage::GetEndTimeCode" },
         { "jsName": "GetTimeCodesPerSecond", "tsReturn": "number", "op": "direct", "cpp": "&pxr::UsdStage::GetTimeCodesPerSecond" },

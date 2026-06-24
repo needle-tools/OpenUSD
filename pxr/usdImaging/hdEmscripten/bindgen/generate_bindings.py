@@ -154,6 +154,18 @@ def _lambda(cpp_type: str, method: dict) -> tuple[str, bool]:
         return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& name, std::string const& typeName, bool custom) {
       return prim.CreateAttribute(pxr::TfToken(name), _FindValueTypeName(typeName), custom);
     })""", False
+    if op == "primLoad":
+        return """emscripten::optional_override([](pxr::UsdPrim const& prim) {
+      prim.Load();
+    })""", False
+    if op == "primUnload":
+        return """emscripten::optional_override([](pxr::UsdPrim const& prim) {
+      prim.Unload();
+    })""", False
+    if op == "primAddPayload":
+        return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& assetPath, std::string const& primPath) {
+      return prim.GetPayloads().AddPayload(assetPath, pxr::SdfPath(primPath));
+    })""", False
     if op == "primAddVariant":
         return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& variantSetName, std::string const& variantName) {
       return prim.GetVariantSet(variantSetName).AddVariant(variantName);
@@ -173,6 +185,14 @@ def _lambda(cpp_type: str, method: dict) -> tuple[str, bool]:
     if op == "primBlockVariantSelection":
         return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& variantSetName) {
       return prim.GetVariantSet(variantSetName).BlockVariantSelection();
+    })""", False
+    if op == "primGetVariantSetNames":
+        return """emscripten::optional_override([](pxr::UsdPrim const& prim) {
+      std::vector<std::string> result;
+      for (std::string const& name : prim.GetVariantSets().GetNames()) {
+        result.push_back(name);
+      }
+      return result;
     })""", False
     if op == "primGetVariantNames":
         return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& variantSetName) {
@@ -203,6 +223,14 @@ def _lambda(cpp_type: str, method: dict) -> tuple[str, bool]:
         return """emscripten::optional_override([](pxr::UsdStage& stage) {
       std::vector<pxr::UsdPrim> result;
       for (pxr::UsdPrim const& prim : stage.Traverse()) {
+        result.push_back(prim);
+      }
+      return result;
+    })""", False
+    if op == "stageTraverseAll":
+        return """emscripten::optional_override([](pxr::UsdStage& stage) {
+      std::vector<pxr::UsdPrim> result;
+      for (pxr::UsdPrim const& prim : stage.TraverseAll()) {
         result.push_back(prim);
       }
       return result;
