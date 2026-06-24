@@ -187,7 +187,9 @@ _MakeNewPlatformDefaultHgi()
     PlugRegistry& plugReg = PlugRegistry::GetInstance();
 
     const char* hgiType = 
-        #if defined(ARCH_OS_LINUX)
+        #if defined(ARCH_OS_WASM_VM)
+            "";
+        #elif defined(ARCH_OS_LINUX)
             "HgiGL";
         #elif defined(ARCH_OS_DARWIN)
             "HgiMetal";
@@ -198,6 +200,12 @@ _MakeNewPlatformDefaultHgi()
             #error Unknown Platform
             return nullptr;
         #endif
+
+    if (!*hgiType) {
+        TF_DEBUG(HGI_DEBUG_INSTANCE_CREATION).Msg(
+            "No platform default Hgi for this target\n");
+        return nullptr;
+    }
 
     if (TfGetEnvSetting(HGI_ENABLE_VULKAN)) {
         #if defined(PXR_VULKAN_SUPPORT_ENABLED)

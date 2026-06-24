@@ -19,6 +19,9 @@ if(APPLE)
 endif()
 option(PXR_BUILD_OPENCOLORIO_PLUGIN "Build OpenColorIO plugin" OFF)
 option(PXR_BUILD_USD_IMAGING "Build USD imaging components" ON)
+option(PXR_BUILD_HD_EMSCRIPTEN "Build the Emscripten Hydra bridge" OFF)
+set(PXR_HD_EMSCRIPTEN_GLTF_PLUGIN_PREFIX "" CACHE PATH
+    "Optional Adobe USD-Fileformat-plugins wasm install prefix to link into hdEmscripten.")
 option(PXR_BUILD_USD_VALIDATION "Build USD validation library and core USD validators" ON)
 option(PXR_BUILD_EXEC "Build the Exec libraries" ON)
 option(PXR_BUILD_USDVIEW "Build usdview" ON)
@@ -172,6 +175,20 @@ if (${PXR_BUILD_USD_IMAGING} AND NOT ${PXR_BUILD_IMAGING})
     message(STATUS
         "Setting PXR_BUILD_USD_IMAGING=OFF because PXR_BUILD_IMAGING=OFF")
     set(PXR_BUILD_USD_IMAGING "OFF" CACHE BOOL "" FORCE)
+endif()
+
+if (${PXR_BUILD_HD_EMSCRIPTEN})
+    if (NOT EMSCRIPTEN)
+        message(STATUS
+            "Setting PXR_BUILD_HD_EMSCRIPTEN=OFF because it is only supported "
+            "when targeting Wasm")
+        set(PXR_BUILD_HD_EMSCRIPTEN "OFF" CACHE BOOL "" FORCE)
+    elseif (NOT ${PXR_BUILD_USD_IMAGING})
+        message(STATUS
+            "Setting PXR_BUILD_HD_EMSCRIPTEN=OFF because "
+            "PXR_BUILD_USD_IMAGING=OFF")
+        set(PXR_BUILD_HD_EMSCRIPTEN "OFF" CACHE BOOL "" FORCE)
+    endif()
 endif()
 
 if (${PXR_ENABLE_METAL_SUPPORT})
