@@ -20,32 +20,68 @@ struct AssetData {
     int length;
 };
 
-EM_JS(void, fetch_asset, (const char* route, int dataPtr), {
+EM_ASYNC_JS(void, fetch_asset, (const char* route, int dataPtr), {
     const routeString = UTF8ToString(route);
+    const heap32 = () => typeof GROWABLE_HEAP_I32 === 'function' ? GROWABLE_HEAP_I32() : HEAP32;
+    const heap8 = () => typeof GROWABLE_HEAP_U8 === 'function' ? GROWABLE_HEAP_U8() : HEAPU8;
+    const emitProgress = (detail) => {
+        const payload = Object.assign({ url: routeString }, detail);
+        Module['onAssetFetchProgress']?.(payload);
+        Module['onUsdAssetFetchProgress']?.(payload);
+        const target = typeof globalThis !== 'undefined' ? globalThis : undefined;
+        if (target?.dispatchEvent && typeof CustomEvent !== 'undefined') {
+            target.dispatchEvent(new CustomEvent('needle-usd-asset-fetch-progress', { detail: payload }));
+        }
+    };
+    const fail = () => {
+        const view = heap32();
+        view[dataPtr >> 2] = 0;
+        view[(dataPtr >> 2) + 1] = 0;
+    };
+
     try {
-        const request = new XMLHttpRequest();
-        request.open('GET', routeString, false);
-        request.overrideMimeType('text/plain; charset=x-user-defined');
-        request.send(null);
-        if (request.status !== 0 && (request.status < 200 || request.status >= 300)) {
-            throw new Error('Fetch failed: ' + request.statusText);
+        emitProgress({ state: 'start', loaded: 0, total: 0 });
+        const response = await fetch(routeString);
+        if (!response.ok) {
+            throw new Error('Fetch failed: ' + response.status + ' ' + response.statusText);
         }
-        const response = request.responseText;
-        if (response == null) throw new Error('Fetch failed: empty response');
-        const length = response.length;
-        const ptr = _malloc(length);
-        const heap8 = typeof GROWABLE_HEAP_U8 === 'function' ? GROWABLE_HEAP_U8() : HEAPU8;
-        for (let i = 0; i < length; i++) {
-            heap8[ptr + i] = response.charCodeAt(i) & 0xff;
+
+        let bytes;
+        const total = Number(response.headers.get('Content-Length') || 0);
+        if (response.body?.getReader) {
+            const reader = response.body.getReader();
+            const chunks = [];
+            let loaded = 0;
+            for (;;) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                if (!value) continue;
+                chunks.push(value);
+                loaded += value.byteLength;
+                emitProgress({ state: 'progress', loaded, total });
+            }
+
+            bytes = new Uint8Array(loaded);
+            let offset = 0;
+            for (const chunk of chunks) {
+                bytes.set(chunk, offset);
+                offset += chunk.byteLength;
+            }
         }
-        const heap32 = typeof GROWABLE_HEAP_I32 === 'function' ? GROWABLE_HEAP_I32() : HEAP32;
-        heap32[dataPtr >> 2] = ptr;
-        heap32[(dataPtr >> 2) + 1] = length;
+        else {
+            bytes = new Uint8Array(await response.arrayBuffer());
+        }
+
+        const ptr = _malloc(bytes.byteLength);
+        heap8().set(bytes, ptr);
+        const view = heap32();
+        view[dataPtr >> 2] = ptr;
+        view[(dataPtr >> 2) + 1] = bytes.byteLength;
+        emitProgress({ state: 'done', loaded: bytes.byteLength, total: total || bytes.byteLength });
     } catch (err) {
         console.error("Error in fetch_asset: ", err);
-        const heap32 = typeof GROWABLE_HEAP_I32 === 'function' ? GROWABLE_HEAP_I32() : HEAP32;
-        heap32[dataPtr >> 2] = 0;
-        heap32[(dataPtr >> 2) + 1] = 0;
+        fail();
+        emitProgress({ state: 'error', loaded: 0, total: 0, error: String(err?.message || err) });
     }
 });
 

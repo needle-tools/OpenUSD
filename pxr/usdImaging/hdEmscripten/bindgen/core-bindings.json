@@ -64,8 +64,8 @@
         { "jsName": "IsDefined", "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::IsDefined" },
         { "jsName": "IsLoaded", "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::IsLoaded" },
         { "jsName": "HasAuthoredPayloads", "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::HasAuthoredPayloads" },
-        { "jsName": "Load", "tsReturn": "void", "op": "primLoad" },
-        { "jsName": "Unload", "tsReturn": "void", "op": "primUnload" },
+        { "jsName": "Load", "tsReturn": "void", "tsMayAsync": true, "op": "primLoad" },
+        { "jsName": "Unload", "tsReturn": "void", "tsMayAsync": true, "op": "primUnload" },
         { "jsName": "AddPayload", "tsArgs": [{ "name": "assetPath", "type": "string" }, { "name": "primPath", "type": "string" }], "tsReturn": "boolean", "op": "primAddPayload" },
         { "jsName": "GetParent", "tsReturn": "USDPrim", "op": "direct", "cpp": "&pxr::UsdPrim::GetParent" },
         { "jsName": "GetChildren", "tsReturn": "USDPrimVector", "op": "primChildren" },
@@ -75,7 +75,7 @@
         { "jsName": "GetRelationship", "tsArgs": [{ "name": "name", "type": "string" }], "tsReturn": "USDRelationship", "op": "primGetRelationship" },
         { "jsName": "CreateRelationship", "tsArgs": [{ "name": "name", "type": "string" }, { "name": "custom", "type": "boolean" }], "tsReturn": "USDRelationship", "op": "primCreateRelationship" },
         { "jsName": "AddVariant", "tsArgs": [{ "name": "variantSetName", "type": "string" }, { "name": "variantName", "type": "string" }], "tsReturn": "boolean", "op": "primAddVariant" },
-        { "jsName": "SetVariantSelection", "tsArgs": [{ "name": "variantSetName", "type": "string" }, { "name": "variantName", "type": "string" }], "tsReturn": "boolean", "op": "primSetVariantSelection" },
+        { "jsName": "SetVariantSelection", "tsArgs": [{ "name": "variantSetName", "type": "string" }, { "name": "variantName", "type": "string" }], "tsReturn": "boolean", "tsMayAsync": true, "op": "primSetVariantSelection" },
         { "jsName": "GetVariantSelection", "tsArgs": [{ "name": "variantSetName", "type": "string" }], "tsReturn": "string", "op": "primGetVariantSelection" },
         { "jsName": "ClearVariantSelection", "tsArgs": [{ "name": "variantSetName", "type": "string" }], "tsReturn": "boolean", "op": "primClearVariantSelection" },
         { "jsName": "BlockVariantSelection", "tsArgs": [{ "name": "variantSetName", "type": "string" }], "tsReturn": "boolean", "op": "primBlockVariantSelection" },
@@ -116,9 +116,9 @@
   ],
   "functions": [
     { "jsName": "CreateStage", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "USDStage", "op": "createStage" },
-    { "jsName": "OpenStage", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "USDStage", "op": "openStage" },
+    { "jsName": "OpenStage", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "USDStage", "tsMayAsync": true, "op": "openStage" },
     { "jsName": "ReleaseStage", "tsArgs": [{ "name": "stage", "type": "USDStage" }], "tsReturn": "boolean", "op": "releaseStage" },
-    { "jsName": "CreateUsdzPackage", "tsArgs": [{ "name": "assetPath", "type": "string" }, { "name": "usdzPath", "type": "string" }], "tsReturn": "boolean", "op": "createUsdzPackage" },
+    { "jsName": "CreateUsdzPackage", "tsArgs": [{ "name": "assetPath", "type": "string" }, { "name": "usdzPath", "type": "string" }], "tsReturn": "boolean", "tsMayAsync": true, "op": "createUsdzPackage" },
     { "jsName": "ReadFile", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "Uint8Array", "op": "readFile" }
   ]
 }
