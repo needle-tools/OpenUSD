@@ -16,6 +16,7 @@
 #include "pxr/usd/ar/asset.h"
 #include "pxr/usd/ar/resolver.h"
 #include "pxr/usd/ar/resolverContextBinder.h"
+#include "pxr/usd/sdf/layerUtils.h"
 
 #include "webRenderDelegate.h"
 #include "pxr/imaging/hd/unitTestNullRenderPass.h"
@@ -170,7 +171,29 @@ public:
         auto& resolver = ArGetResolver();
         ArResolverContextBinder binder(&resolver, _stage->GetPathResolverContext());
 
-        std::shared_ptr<ArAsset> asset = resolver.OpenAsset(ArResolvedPath(filename));
+        auto openAsset = [&resolver](const std::string& path) {
+            std::shared_ptr<ArAsset> asset =
+                resolver.OpenAsset(ArResolvedPath(path));
+            if (asset) {
+                return asset;
+            }
+
+            ArResolvedPath resolvedPath = resolver.Resolve(path);
+            if (!resolvedPath.empty()) {
+                asset = resolver.OpenAsset(resolvedPath);
+            }
+            return asset;
+        };
+
+        std::shared_ptr<ArAsset> asset = openAsset(filename);
+        if (!asset) {
+            const std::string anchoredPath =
+                SdfComputeAssetPathRelativeToLayer(
+                    _stage->GetRootLayer(), filename);
+            if (!anchoredPath.empty() && anchoredPath != filename) {
+                asset = openAsset(anchoredPath);
+            }
+        }
         if (!asset) {
             callback(emscripten::val::undefined());
             return;

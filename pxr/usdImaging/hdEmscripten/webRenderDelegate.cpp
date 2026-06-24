@@ -529,7 +529,15 @@ public:
                         parameters.set(parameterName.GetString(), _VtValueToJsVal(value));
                         if (value.IsHolding<SdfAssetPath>()) {
                             SdfAssetPath assetPath = value.Get<SdfAssetPath>();
-                            parameters.set("resolvedPath", assetPath.GetResolvedPath());
+                            const std::string parameter =
+                                parameterName.GetString();
+                            const std::string resolvedPath =
+                                assetPath.GetResolvedPath();
+                            parameters.set(parameter + ":resolvedPath",
+                                resolvedPath);
+                            if (parameterName == TfToken("file")) {
+                                parameters.set("resolvedPath", resolvedPath);
+                            }
                         }
                     }
                     _sPrim.call<val>("updateNode", networkId.GetString(), node.path.GetAsString(), parameters);
