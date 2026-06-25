@@ -25,6 +25,7 @@
 #include "pxr/usd/usdGeom/metrics.h"
 #include "pxr/usd/usdGeom/tokens.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 
@@ -91,13 +92,10 @@ public:
                 HdTokens->geometry,
                 HdReprSelector(HdReprTokens->refined));
 
-        TfTokenVector renderTags;
-        renderTags.push_back(HdRenderTagTokens->geometry);
-
         _Init(UsdStage::Open(usdFilePath),
               collection,
               SdfPath::AbsoluteRootPath(),
-              renderTags);
+              _GetDefaultRenderTags());
     }
 
     HdWebSyncDriver(emscripten::val renderDelegateInterface,
@@ -113,13 +111,10 @@ public:
                 HdTokens->geometry,
                 HdReprSelector(HdReprTokens->refined));
 
-        TfTokenVector renderTags;
-        renderTags.push_back(HdRenderTagTokens->geometry);
-
         _Init(usdStage,
               collection,
               SdfPath::AbsoluteRootPath(),
-              renderTags);
+              _GetDefaultRenderTags());
     }
 
     ~HdWebSyncDriver()
@@ -154,13 +149,10 @@ public:
                 HdTokens->geometry,
                 HdReprSelector(HdReprTokens->refined));
 
-        TfTokenVector renderTags;
-        renderTags.push_back(HdRenderTagTokens->geometry);
-
         _Init(_stage,
               collection,
               SdfPath::AbsoluteRootPath(),
-              renderTags);
+              _renderTags);
     }
 
     void getFile(std::string filename, emscripten::val callback) {
@@ -262,6 +254,29 @@ public:
         return _stage ? _stage->GetTimeCodesPerSecond() : 24.0;
     }
 
+    void SetIncludedPurposes(emscripten::val includedPurposes) {
+        if (includedPurposes.isUndefined() || includedPurposes.isNull()) {
+            _renderTags = _GetDefaultRenderTags();
+            return;
+        }
+
+        TfTokenVector renderTags;
+        const unsigned length =
+            includedPurposes["length"].as<unsigned>();
+        for (unsigned i = 0; i < length; ++i) {
+            std::string purpose = includedPurposes[i].as<std::string>();
+            TfToken renderTag = _PurposeToRenderTag(TfToken(purpose));
+            if (std::find(renderTags.begin(), renderTags.end(), renderTag) ==
+                    renderTags.end()) {
+                renderTags.push_back(renderTag);
+            }
+        }
+
+        _renderTags = renderTags.empty()
+            ? _GetDefaultRenderTags()
+            : renderTags;
+    }
+
 private:
     HdEngine _engine;
     WebRenderDelegate _renderDelegate;
@@ -270,6 +285,20 @@ private:
     HdRenderPassSharedPtr _geometryPass;
     UsdStageRefPtr _stage;
     TfTokenVector _renderTags;
+
+    static TfToken _PurposeToRenderTag(TfToken const &purpose) {
+        if (purpose == UsdGeomTokens->default_) {
+            return HdRenderTagTokens->geometry;
+        }
+        return purpose;
+    }
+
+    static TfTokenVector _GetDefaultRenderTags() {
+        TfTokenVector renderTags;
+        renderTags.push_back(HdRenderTagTokens->geometry);
+        renderTags.push_back(UsdGeomTokens->render);
+        return renderTags;
+    }
 
     void _Init(UsdStageRefPtr const& usdStage,
                HdRprimCollection const &collection,

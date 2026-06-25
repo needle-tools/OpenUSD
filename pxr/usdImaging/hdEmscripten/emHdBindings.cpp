@@ -49,6 +49,7 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
     .function("GetStageStartTimeCode", &pxr::HdWebSyncDriver::GetStageStartTimeCode)
     .function("GetStageEndTimeCode", &pxr::HdWebSyncDriver::GetStageEndTimeCode)
     .function("GetStageTimeCodesPerSecond", &pxr::HdWebSyncDriver::GetStageTimeCodesPerSecond)
+    .function("SetIncludedPurposes", &pxr::HdWebSyncDriver::SetIncludedPurposes)
     .function("SetTime", &pxr::HdWebSyncDriver::SetTime)
     .function("GetTime", &pxr::HdWebSyncDriver::GetTime)
     .smart_ptr<std::shared_ptr<pxr::HdWebSyncDriver>>("std::shared_ptr<pxr::HdWebSyncDriver>")

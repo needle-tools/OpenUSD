@@ -258,6 +258,15 @@ public:
         // Get the id of this mesh. This is used to get various resources associated with it.
         SdfPath const& id = GetId();
 
+        _UpdateVisibility(delegate, dirtyBits);
+        TfToken const renderTag = GetRenderTag();
+        const bool visible = IsVisible() && renderTag != HdRenderTagTokens->hidden;
+        runInMainThread([&]() {
+            _rPrim.call<void>("setVisibilityState",
+                visible,
+                renderTag.GetString());
+        });
+
         // Materials need to be synced before primvars, to allow the JS side to apply primvar information like
         // displayColor if no other material is set.
         bool fetchedTopology = false;
