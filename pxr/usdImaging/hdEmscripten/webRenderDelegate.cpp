@@ -37,10 +37,14 @@
 #include "pxr/imaging/hd/materialNetwork2Interface.h"
 #include "pxr/imaging/hd/smoothNormals.h"
 #include "pxr/imaging/hd/vtBufferSource.h"
+#include "pxr/imaging/hd/sceneDelegate.h"
 #include "pxr/imaging/pxOsd/refinerFactory.h"
 #include "pxr/imaging/pxOsd/tokens.h"
 #include "pxr/usd/ar/resolver.h"
 #include "pxr/usd/sdf/assetPath.h"
+
+#include "pxr/base/gf/matrix4d.h"
+#include "pxr/base/gf/quaternion.h"
 
 #include <opensubdiv/far/primvarRefiner.h>
 #include <opensubdiv/far/topologyLevel.h>
@@ -53,6 +57,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <map>
 #include <vector>
 
 using namespace emscripten;
@@ -184,6 +189,200 @@ emscripten::val _VtValueToJsVal(VtValue const &value)
     return emscripten::val::undefined();
 }
 
+class Emscripten_Instancer final : public HdInstancer {
+public:
+    Emscripten_Instancer(HdSceneDelegate* delegate, SdfPath const& id)
+        : HdInstancer(delegate, id)
+        , _visible(true)
+    {
+    }
+
+    void Sync(HdSceneDelegate *delegate,
+              HdRenderParam *renderParam,
+              HdDirtyBits *dirtyBits) override
+    {
+        if (*dirtyBits & HdChangeTracker::DirtyVisibility) {
+            _visible = delegate->GetVisible(GetId());
+        }
+
+        _UpdateInstancer(delegate, dirtyBits);
+
+        if (HdChangeTracker::IsAnyPrimvarDirty(*dirtyBits, GetId())) {
+            _SyncPrimvars(delegate, *dirtyBits);
+        }
+    }
+
+    VtMatrix4dArray ComputeInstanceTransforms(SdfPath const &prototypeId)
+    {
+        if (!_visible) {
+            return {};
+        }
+
+        HdSceneDelegate *delegate = GetDelegate();
+        VtIntArray instanceIndices =
+            delegate->GetInstanceIndices(GetId(), prototypeId);
+        GfMatrix4d instancerTransform =
+            delegate->GetInstancerTransform(GetId());
+
+        VtMatrix4dArray transforms(instanceIndices.size());
+        for (size_t i = 0; i < instanceIndices.size(); ++i) {
+            transforms[i] = instancerTransform;
+        }
+
+        _ApplyTranslations(instanceIndices, &transforms);
+        _ApplyRotations(instanceIndices, &transforms);
+        _ApplyScales(instanceIndices, &transforms);
+        _ApplyTransforms(instanceIndices, &transforms);
+
+        if (GetParentId().IsEmpty()) {
+            return transforms;
+        }
+
+        HdInstancer *parentInstancer =
+            delegate->GetRenderIndex().GetInstancer(GetParentId());
+        Emscripten_Instancer *parent =
+            dynamic_cast<Emscripten_Instancer*>(parentInstancer);
+        if (!parent) {
+            return transforms;
+        }
+
+        VtMatrix4dArray parentTransforms =
+            parent->ComputeInstanceTransforms(GetId());
+        VtMatrix4dArray final(parentTransforms.size() * transforms.size());
+        for (size_t i = 0; i < parentTransforms.size(); ++i) {
+            for (size_t j = 0; j < transforms.size(); ++j) {
+                final[i * transforms.size() + j] =
+                    transforms[j] * parentTransforms[i];
+            }
+        }
+        return final;
+    }
+
+private:
+    std::map<TfToken, VtValue> _primvarMap;
+    bool _visible;
+
+    void _SyncPrimvars(HdSceneDelegate *delegate, HdDirtyBits dirtyBits)
+    {
+        SdfPath const& id = GetId();
+        HdPrimvarDescriptorVector primvars =
+            delegate->GetPrimvarDescriptors(id, HdInterpolationInstance);
+
+        for (HdPrimvarDescriptor const& primvar : primvars) {
+            if (!HdChangeTracker::IsPrimvarDirty(dirtyBits, id, primvar.name)) {
+                continue;
+            }
+
+            VtValue value = delegate->Get(id, primvar.name);
+            if (value.IsEmpty()) {
+                _primvarMap.erase(primvar.name);
+            } else {
+                _primvarMap[primvar.name] = value;
+            }
+        }
+    }
+
+    template <class ArrayT, class ValueT>
+    static bool _SampleArray(
+        VtValue const &value,
+        int index,
+        ValueT *outValue)
+    {
+        if (!value.IsHolding<ArrayT>() || index < 0) {
+            return false;
+        }
+
+        ArrayT const &array = value.UncheckedGet<ArrayT>();
+        if (static_cast<size_t>(index) >= array.size()) {
+            return false;
+        }
+
+        *outValue = array[index];
+        return true;
+    }
+
+    VtValue const *_GetPrimvar(TfToken const &name) const
+    {
+        auto const it = _primvarMap.find(name);
+        return it == _primvarMap.end() ? nullptr : &it->second;
+    }
+
+    void _ApplyTranslations(
+        VtIntArray const &indices,
+        VtMatrix4dArray *transforms) const
+    {
+        VtValue const *value = _GetPrimvar(HdInstancerTokens->instanceTranslations);
+        if (!value) {
+            return;
+        }
+
+        for (size_t i = 0; i < indices.size(); ++i) {
+            GfVec3f translate;
+            if (_SampleArray<VtVec3fArray>(*value, indices[i], &translate)) {
+                GfMatrix4d matrix(1);
+                matrix.SetTranslate(GfVec3d(translate));
+                (*transforms)[i] = matrix * (*transforms)[i];
+            }
+        }
+    }
+
+    void _ApplyRotations(
+        VtIntArray const &indices,
+        VtMatrix4dArray *transforms) const
+    {
+        VtValue const *value = _GetPrimvar(HdInstancerTokens->instanceRotations);
+        if (!value) {
+            return;
+        }
+
+        for (size_t i = 0; i < indices.size(); ++i) {
+            GfVec4f quat;
+            if (_SampleArray<VtVec4fArray>(*value, indices[i], &quat)) {
+                GfMatrix4d matrix(1);
+                matrix.SetRotate(GfQuatd(
+                    quat[0], quat[1], quat[2], quat[3]));
+                (*transforms)[i] = matrix * (*transforms)[i];
+            }
+        }
+    }
+
+    void _ApplyScales(
+        VtIntArray const &indices,
+        VtMatrix4dArray *transforms) const
+    {
+        VtValue const *value = _GetPrimvar(HdInstancerTokens->instanceScales);
+        if (!value) {
+            return;
+        }
+
+        for (size_t i = 0; i < indices.size(); ++i) {
+            GfVec3f scale;
+            if (_SampleArray<VtVec3fArray>(*value, indices[i], &scale)) {
+                GfMatrix4d matrix(1);
+                matrix.SetScale(GfVec3d(scale));
+                (*transforms)[i] = matrix * (*transforms)[i];
+            }
+        }
+    }
+
+    void _ApplyTransforms(
+        VtIntArray const &indices,
+        VtMatrix4dArray *transforms) const
+    {
+        VtValue const *value = _GetPrimvar(HdInstancerTokens->instanceTransforms);
+        if (!value) {
+            return;
+        }
+
+        for (size_t i = 0; i < indices.size(); ++i) {
+            GfMatrix4d matrix;
+            if (_SampleArray<VtMatrix4dArray>(*value, indices[i], &matrix)) {
+                (*transforms)[i] = matrix * (*transforms)[i];
+            }
+        }
+    }
+};
+
 class Emscripten_Rprim final : public HdMesh {
 public:
     Emscripten_Rprim(TfToken const& typeId,
@@ -259,6 +458,7 @@ public:
         SdfPath const& id = GetId();
 
         _UpdateVisibility(delegate, dirtyBits);
+        _UpdateInstancer(delegate, dirtyBits);
         TfToken const renderTag = GetRenderTag();
         const bool visible = IsVisible() && renderTag != HdRenderTagTokens->hidden;
         runInMainThread([&]() {
@@ -380,6 +580,38 @@ public:
             _transform = GfMatrix4f(delegate->GetTransform(id));
             runInMainThread([&]() {
                 _rPrim.call<void>("setTransform", val(typed_memory_view(16, reinterpret_cast<float*>(_transform.data()))));
+            });
+        }
+
+        if (HdChangeTracker::IsInstancerDirty(*dirtyBits, id) ||
+            HdChangeTracker::IsTransformDirty(*dirtyBits, id)) {
+            HdInstancer::_SyncInstancerAndParents(
+                delegate->GetRenderIndex(), GetInstancerId());
+
+            std::vector<GfMatrix4f> transforms;
+            if (!GetInstancerId().IsEmpty()) {
+                HdInstancer *instancer =
+                    delegate->GetRenderIndex().GetInstancer(GetInstancerId());
+                Emscripten_Instancer *emscriptenInstancer =
+                    dynamic_cast<Emscripten_Instancer*>(instancer);
+                if (emscriptenInstancer) {
+                    VtMatrix4dArray instanceTransforms =
+                        emscriptenInstancer->ComputeInstanceTransforms(id);
+                    transforms.reserve(instanceTransforms.size());
+                    for (GfMatrix4d const &instanceTransform : instanceTransforms) {
+                        transforms.push_back(
+                            _transform * GfMatrix4f(instanceTransform));
+                    }
+                }
+            }
+
+            runInMainThread([&]() {
+                _rPrim.call<void>(
+                    "setInstanceTransforms",
+                    val(typed_memory_view(
+                        16 * transforms.size(),
+                        reinterpret_cast<float*>(transforms.data()))),
+                    static_cast<int>(transforms.size()));
             });
         }
 
@@ -885,7 +1117,7 @@ HdInstancer *
 WebRenderDelegate::CreateInstancer(HdSceneDelegate *delegate,
                                                SdfPath const& id)
 {
-    return new HdInstancer(delegate, id);
+    return new Emscripten_Instancer(delegate, id);
 }
 
 void
