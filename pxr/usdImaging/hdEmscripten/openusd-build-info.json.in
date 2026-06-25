@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "openusd": {
+    "version": "@PXR_MAJOR_VERSION@.@PXR_MINOR_VERSION@.@PXR_PATCH_VERSION@",
+    "pxrVersion": @PXR_VERSION@,
+    "gitSha": "@HD_EMSCRIPTEN_OPENUSD_GIT_SHA@",
+    "gitDirty": @HD_EMSCRIPTEN_OPENUSD_GIT_DIRTY@
+  },
+  "toolchain": {
+    "emscripten": "@CMAKE_CXX_COMPILER_VERSION@",
+    "cxxCompiler": "@CMAKE_CXX_COMPILER@",
+    "cmakeBuildType": "@CMAKE_BUILD_TYPE@"
+  },
+  "modules": {
+    "usdImaging": @HD_EMSCRIPTEN_BUILD_USD_IMAGING@,
+    "hydraBridge": @HD_EMSCRIPTEN_BUILD_HD_EMSCRIPTEN@,
+    "materialX": @HD_EMSCRIPTEN_ENABLE_MATERIALX@,
+    "openSubdiv": @HD_EMSCRIPTEN_ENABLE_OPENSUBDIV@,
+    "usdGltf": @HD_EMSCRIPTEN_ENABLE_GLTF@
+  },
+  "dependencies": {
+    "openSubdiv": {
+      "version": "@OPENSUBDIV_VERSION@"
+    },
+    "materialX": {
+      "prefix": "@MaterialX_DIR@",
+      "gitSha": "@PXR_HD_EMSCRIPTEN_MATERIALX_REPO_SHA@",
+      "gitDirty": @HD_EMSCRIPTEN_MATERIALX_REPO_DIRTY@
+    },
+    "usdGltf": {
+      "prefix": "@PXR_HD_EMSCRIPTEN_GLTF_PLUGIN_PREFIX@",
+      "gitSha": "@PXR_HD_EMSCRIPTEN_GLTF_PLUGIN_REPO_SHA@",
+      "gitDirty": @HD_EMSCRIPTEN_GLTF_PLUGIN_REPO_DIRTY@
+    },
+    "emsdk": {
+      "gitSha": "@PXR_HD_EMSCRIPTEN_EMSDK_SHA@",
+      "gitDirty": @HD_EMSCRIPTEN_EMSDK_DIRTY@
+    }
+  }
+}

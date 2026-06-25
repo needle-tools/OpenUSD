@@ -11,12 +11,92 @@ set(HD_EMSCRIPTEN_BINDGEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bindgen")
 set(HD_EMSCRIPTEN_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(HD_EMSCRIPTEN_CORE_BINDINGS_INC "${HD_EMSCRIPTEN_GENERATED_DIR}/emHdCoreBindings.inc")
 set(HD_EMSCRIPTEN_CORE_BINDINGS_DTS "${HD_EMSCRIPTEN_GENERATED_DIR}/usd-core-bindings.d.ts")
+set(HD_EMSCRIPTEN_BUILD_INFO_JSON_FILE "${HD_EMSCRIPTEN_GENERATED_DIR}/openusd-build-info.json")
+set(HD_EMSCRIPTEN_BUILD_INFO_HEADER "${HD_EMSCRIPTEN_GENERATED_DIR}/openusdBuildInfo.h")
+file(MAKE_DIRECTORY "${HD_EMSCRIPTEN_GENERATED_DIR}")
 if(PYTHON_EXECUTABLE)
     set(HD_EMSCRIPTEN_PYTHON_EXECUTABLE "${PYTHON_EXECUTABLE}")
 else()
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     set(HD_EMSCRIPTEN_PYTHON_EXECUTABLE "${Python3_EXECUTABLE}")
 endif()
+
+function(_hd_emscripten_json_bool out value)
+    if(${value})
+        set(${out} "true" PARENT_SCOPE)
+    else()
+        set(${out} "false" PARENT_SCOPE)
+    endif()
+endfunction()
+
+function(_hd_emscripten_git_sha out repo)
+    if(EXISTS "${repo}/.git")
+        execute_process(
+            COMMAND git -C "${repo}" rev-parse HEAD
+            OUTPUT_VARIABLE _sha
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+        )
+    endif()
+    set(${out} "${_sha}" PARENT_SCOPE)
+endfunction()
+
+function(_hd_emscripten_git_dirty out repo)
+    set(_dirty "false")
+    if(EXISTS "${repo}/.git")
+        execute_process(
+            COMMAND git -C "${repo}" diff --quiet --ignore-submodules HEAD --
+            RESULT_VARIABLE _diff_result
+            OUTPUT_QUIET
+            ERROR_QUIET
+        )
+        if(NOT _diff_result EQUAL 0)
+            set(_dirty "true")
+        endif()
+    endif()
+    set(${out} "${_dirty}" PARENT_SCOPE)
+endfunction()
+
+_hd_emscripten_git_sha(HD_EMSCRIPTEN_OPENUSD_GIT_SHA "${PROJECT_SOURCE_DIR}")
+_hd_emscripten_git_dirty(HD_EMSCRIPTEN_OPENUSD_GIT_DIRTY "${PROJECT_SOURCE_DIR}")
+_hd_emscripten_json_bool(HD_EMSCRIPTEN_BUILD_USD_IMAGING PXR_BUILD_USD_IMAGING)
+_hd_emscripten_json_bool(HD_EMSCRIPTEN_BUILD_HD_EMSCRIPTEN PXR_BUILD_HD_EMSCRIPTEN)
+_hd_emscripten_json_bool(HD_EMSCRIPTEN_ENABLE_MATERIALX PXR_ENABLE_MATERIALX_SUPPORT)
+_hd_emscripten_json_bool(HD_EMSCRIPTEN_ENABLE_OPENSUBDIV OPENSUBDIV_FOUND)
+if(PXR_HD_EMSCRIPTEN_GLTF_PLUGIN_PREFIX)
+    set(HD_EMSCRIPTEN_ENABLE_GLTF "true")
+else()
+    set(HD_EMSCRIPTEN_ENABLE_GLTF "false")
+endif()
+if(NOT DEFINED PXR_HD_EMSCRIPTEN_MATERIALX_REPO_SHA)
+    set(PXR_HD_EMSCRIPTEN_MATERIALX_REPO_SHA "")
+endif()
+if(NOT DEFINED PXR_HD_EMSCRIPTEN_GLTF_PLUGIN_REPO_SHA)
+    set(PXR_HD_EMSCRIPTEN_GLTF_PLUGIN_REPO_SHA "")
+endif()
+if(NOT DEFINED PXR_HD_EMSCRIPTEN_EMSDK_SHA)
+    set(PXR_HD_EMSCRIPTEN_EMSDK_SHA "")
+endif()
+if(NOT DEFINED HD_EMSCRIPTEN_MATERIALX_REPO_DIRTY)
+    set(HD_EMSCRIPTEN_MATERIALX_REPO_DIRTY "false")
+endif()
+if(NOT DEFINED HD_EMSCRIPTEN_GLTF_PLUGIN_REPO_DIRTY)
+    set(HD_EMSCRIPTEN_GLTF_PLUGIN_REPO_DIRTY "false")
+endif()
+if(NOT DEFINED HD_EMSCRIPTEN_EMSDK_DIRTY)
+    set(HD_EMSCRIPTEN_EMSDK_DIRTY "false")
+endif()
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/openusd-build-info.json.in"
+    "${HD_EMSCRIPTEN_BUILD_INFO_JSON_FILE}"
+    @ONLY
+)
+file(READ "${HD_EMSCRIPTEN_BUILD_INFO_JSON_FILE}" HD_EMSCRIPTEN_BUILD_INFO_JSON)
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/openusdBuildInfo.h.in"
+    "${HD_EMSCRIPTEN_BUILD_INFO_HEADER}"
+    @ONLY
+)
 
 add_custom_command(
     OUTPUT
@@ -133,6 +213,7 @@ endif()
 add_executable(${BINDINGS_NAME}
     emHdBindings.cpp
     "${HD_EMSCRIPTEN_CORE_BINDINGS_INC}"
+    "${HD_EMSCRIPTEN_BUILD_INFO_HEADER}"
     webRenderDelegate.cpp
 )
 
@@ -195,5 +276,10 @@ install(
 
 install(
     FILES "${HD_EMSCRIPTEN_CORE_BINDINGS_DTS}"
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/share/hdEmscripten
+)
+
+install(
+    FILES "${HD_EMSCRIPTEN_BUILD_INFO_JSON_FILE}"
     DESTINATION ${CMAKE_INSTALL_PREFIX}/share/hdEmscripten
 )

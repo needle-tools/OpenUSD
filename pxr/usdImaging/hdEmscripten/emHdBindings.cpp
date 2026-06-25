@@ -1,6 +1,7 @@
 #include "pxr/pxr.h"
 
 #include "webSyncDriver.h"
+#include "generated/openusdBuildInfo.h"
 
 #include "pxr/base/tf/stringUtils.h"
 #include "pxr/base/gf/matrix4d.h"
@@ -45,6 +46,9 @@ using namespace emscripten;
 
 EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
   pxr::hdEmscriptenGenerated::RegisterUsdCoreBindings();
+  function("GetBuildInfoJson", optional_override([]() {
+    return std::string(kHdEmscriptenOpenUsdBuildInfoJson);
+  }));
 
   class_<pxr::HdWebSyncDriver>("HdWebSyncDriver")
     .constructor<emscripten::val, std::string>()

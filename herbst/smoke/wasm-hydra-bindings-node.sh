@@ -35,6 +35,7 @@ getUsdModule({
     OpenStage: typeof USD.OpenStage,
     ReleaseStage: typeof USD.ReleaseStage,
     CreateUsdzPackage: typeof USD.CreateUsdzPackage,
+    GetBuildInfoJson: typeof USD.GetBuildInfoJson,
     ReadFile: typeof USD.ReadFile,
     FS_createDataFile: typeof USD.FS_createDataFile,
     FS_createPath: typeof USD.FS_createPath,
@@ -49,6 +50,14 @@ getUsdModule({
     if (type !== "function") {
       throw new Error(`${name} expected function, got ${type}`);
     }
+  }
+
+  const buildInfo = JSON.parse(USD.GetBuildInfoJson());
+  if (buildInfo.openusd?.version !== "0.26.5") {
+    throw new Error(`Unexpected OpenUSD version in build info: ${buildInfo.openusd?.version}`);
+  }
+  if (buildInfo.modules?.hydraBridge !== true) {
+    throw new Error("Build info does not report the Hydra bridge as enabled");
   }
 
   try {

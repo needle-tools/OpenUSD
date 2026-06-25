@@ -18,6 +18,18 @@ if [[ -d "${ADOBE_PLUGIN_WASM_PREFIX}" ]]; then
   gltf_plugin_args=(-DPXR_HD_EMSCRIPTEN_GLTF_PLUGIN_PREFIX="${ADOBE_PLUGIN_WASM_PREFIX}")
 fi
 
+git_sha() {
+  git -C "$1" rev-parse HEAD 2>/dev/null || true
+}
+
+git_dirty() {
+  if git -C "$1" diff --quiet --ignore-submodules HEAD -- 2>/dev/null; then
+    echo false
+  else
+    echo true
+  fi
+}
+
 rm -rf "${OPENUSD_WASM_HYDRA_MTLX_BUILD_DIR}" "${OPENUSD_WASM_HYDRA_MTLX_PREFIX}"
 
 emcmake cmake \
@@ -52,6 +64,12 @@ emcmake cmake \
   -DBUILD_SHARED_LIBS=OFF \
   -DCMAKE_PREFIX_PATH="${MATERIALX_WASM_OPENUSD_PREFIX}" \
   -DMaterialX_DIR="${MATERIALX_WASM_OPENUSD_PREFIX}/lib/cmake/MaterialX" \
+  -DPXR_HD_EMSCRIPTEN_MATERIALX_REPO_SHA="$(git_sha "${MATERIALX_REPO}")" \
+  -DHD_EMSCRIPTEN_MATERIALX_REPO_DIRTY="$(git_dirty "${MATERIALX_REPO}")" \
+  -DPXR_HD_EMSCRIPTEN_GLTF_PLUGIN_REPO_SHA="$(git_sha "${ADOBE_PLUGIN_REPO}")" \
+  -DHD_EMSCRIPTEN_GLTF_PLUGIN_REPO_DIRTY="$(git_dirty "${ADOBE_PLUGIN_REPO}")" \
+  -DPXR_HD_EMSCRIPTEN_EMSDK_SHA="$(git_sha "${EMSDK_DIR}")" \
+  -DHD_EMSCRIPTEN_EMSDK_DIRTY="$(git_dirty "${EMSDK_DIR}")" \
   -DMATERIALX_STDLIB_DIR="${MATERIALX_WASM_OPENUSD_PREFIX}/libraries" \
   -DCMAKE_FIND_ROOT_PATH="${OPENUSD_WASM_PREFIX};${MATERIALX_WASM_OPENUSD_PREFIX}" \
   -DOpenSubdiv_DIR="${OPENUSD_WASM_PREFIX}/lib/cmake/OpenSubdiv" \
