@@ -46,6 +46,7 @@
 #include "pxr/usd/sdf/assetPath.h"
 
 #include "pxr/base/gf/matrix4d.h"
+#include "pxr/base/gf/range1f.h"
 #include "pxr/base/gf/quaternion.h"
 
 #include <opensubdiv/far/primvarRefiner.h>
@@ -58,6 +59,7 @@
 #endif
 
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <map>
 #include <vector>
@@ -118,6 +120,12 @@ emscripten::val _ValueToJsVal(TfToken const &value)
 emscripten::val _ValueToJsVal(SdfAssetPath const &value)
 {
     return emscripten::val(value.GetAssetPath());
+}
+
+emscripten::val _MatrixToJsVal(GfMatrix4f const& matrix)
+{
+    return emscripten::val(
+        emscripten::typed_memory_view(16, reinterpret_cast<float const*>(matrix.data())));
 }
 
 template <class T>
@@ -1037,15 +1045,118 @@ private:
     Emscripten_Material &operator =(const Emscripten_Material &) = delete;
 };
 
+class Emscripten_Camera final : public HdCamera {
+public:
+    Emscripten_Camera(SdfPath const& id,
+                      emscripten::val renderDelegateInterface)
+        : HdCamera(id)
+        , _renderDelegateInterface(renderDelegateInterface)
+        , _sPrim(val::undefined())
+    {
+        _sPrim = _renderDelegateInterface.call<val>(
+            "createSPrim", std::string(HdPrimTypeTokens->camera.GetText()),
+            id.GetAsString());
+    }
+
+    virtual ~Emscripten_Camera() = default;
+
+    virtual void Sync(HdSceneDelegate *sceneDelegate,
+                      HdRenderParam   *renderParam,
+                      HdDirtyBits     *dirtyBits) override
+    {
+        HdCamera::Sync(sceneDelegate, renderParam, dirtyBits);
+
+        if (!_HasJsMethod(_sPrim, "updateCameraState")) {
+            return;
+        }
+
+        GfMatrix4f transform(GetTransform());
+        GfRange1f const& clippingRange = GetClippingRange();
+        val state = val::object();
+        state.set("typeId", HdPrimTypeTokens->camera.GetString());
+        state.set("id", GetId().GetAsString());
+        state.set("transform", _MatrixToJsVal(transform));
+        state.set("projection",
+            GetProjection() == HdCamera::Orthographic
+                ? std::string("orthographic")
+                : std::string("perspective"));
+        state.set("horizontalAperture", GetHorizontalAperture());
+        state.set("verticalAperture", GetVerticalAperture());
+        state.set("horizontalApertureOffset", GetHorizontalApertureOffset());
+        state.set("verticalApertureOffset", GetVerticalApertureOffset());
+        state.set("focalLength", GetFocalLength());
+        state.set("near", clippingRange.GetMin());
+        state.set("far", clippingRange.GetMax());
+
+        runInMainThread([&]() {
+            _sPrim.call<void>("updateCameraState", state);
+        });
+    }
+
+    virtual HdDirtyBits GetInitialDirtyBitsMask() const override
+    {
+        return HdCamera::AllDirty;
+    }
+
+private:
+    emscripten::val _renderDelegateInterface;
+    emscripten::val _sPrim;
+
+    Emscripten_Camera() = delete;
+    Emscripten_Camera(const Emscripten_Camera &) = delete;
+    Emscripten_Camera &operator=(const Emscripten_Camera &) = delete;
+};
+
 class Emscripten_Light final : public HdLight {
 public:
-    Emscripten_Light(SdfPath const& id) : HdLight(id) {}
+    Emscripten_Light(TfToken const& typeId,
+                     SdfPath const& id,
+                     emscripten::val renderDelegateInterface)
+        : HdLight(id)
+        , _typeId(typeId)
+        , _renderDelegateInterface(renderDelegateInterface)
+        , _sPrim(val::undefined())
+    {
+        _sPrim = _renderDelegateInterface.call<val>(
+            "createSPrim", std::string(typeId.GetText()), id.GetAsString());
+    }
+
     virtual ~Emscripten_Light() = default;
 
     virtual void Sync(HdSceneDelegate *sceneDelegate,
                       HdRenderParam   *renderParam,
                       HdDirtyBits     *dirtyBits) override
     {
+        if (_HasJsMethod(_sPrim, "updateLightState")) {
+            SdfPath const& id = GetId();
+            GfMatrix4f transform(sceneDelegate->GetTransform(id));
+            const float exposure = _GetFloatParam(
+                sceneDelegate, id, HdLightTokens->exposure, 0.0f);
+            val state = val::object();
+            state.set("typeId", _typeId.GetString());
+            state.set("id", id.GetAsString());
+            state.set("visible", sceneDelegate->GetVisible(id));
+            state.set("transform", _MatrixToJsVal(transform));
+            state.set("color", _GfVecToJsVal(_GetVec3fParam(
+                sceneDelegate, id, HdLightTokens->color, GfVec3f(1.0f))));
+            state.set("intensity",
+                _GetFloatParam(sceneDelegate, id, HdLightTokens->intensity, 1.0f)
+                * std::pow(2.0f, exposure));
+            state.set("exposure", exposure);
+            state.set("radius",
+                _GetFloatParam(sceneDelegate, id, HdLightTokens->radius, 0.25f));
+            state.set("width",
+                _GetFloatParam(sceneDelegate, id, HdLightTokens->width, 1.0f));
+            state.set("height",
+                _GetFloatParam(sceneDelegate, id, HdLightTokens->height, 1.0f));
+            state.set("angle",
+                _GetFloatParam(sceneDelegate, id, HdLightTokens->angle, 0.53f));
+
+            runInMainThread([&]() {
+                _sPrim.call<void>("updateLightState", state);
+            });
+        }
+
         *dirtyBits = HdLight::Clean;
     }
 
@@ -1055,6 +1166,44 @@ public:
     }
 
 private:
+    static float _GetFloatParam(HdSceneDelegate *sceneDelegate,
+                                SdfPath const& id,
+                                TfToken const& name,
+                                float fallback)
+    {
+        VtValue value = sceneDelegate->GetLightParamValue(id, name);
+        if (value.IsHolding<float>()) {
+            return value.UncheckedGet<float>();
+        }
+        if (value.IsHolding<double>()) {
+            return static_cast<float>(value.UncheckedGet<double>());
+        }
+        if (value.IsHolding<int>()) {
+            return static_cast<float>(value.UncheckedGet<int>());
+        }
+        return fallback;
+    }
+
+    static GfVec3f _GetVec3fParam(HdSceneDelegate *sceneDelegate,
+                                  SdfPath const& id,
+                                  TfToken const& name,
+                                  GfVec3f const& fallback)
+    {
+        VtValue value = sceneDelegate->GetLightParamValue(id, name);
+        if (value.IsHolding<GfVec3f>()) {
+            return value.UncheckedGet<GfVec3f>();
+        }
+        if (value.IsHolding<GfVec3d>()) {
+            GfVec3d const& vec = value.UncheckedGet<GfVec3d>();
+            return GfVec3f(vec[0], vec[1], vec[2]);
+        }
+        return fallback;
+    }
+
+    TfToken _typeId;
+    emscripten::val _renderDelegateInterface;
+    emscripten::val _sPrim;
+
     Emscripten_Light() = delete;
     Emscripten_Light(const Emscripten_Light &) = delete;
     Emscripten_Light &operator=(const Emscripten_Light &) = delete;
@@ -1180,10 +1329,10 @@ WebRenderDelegate::DestroyRprim(HdRprim *rPrim)
 
 HdSprim *
 WebRenderDelegate::CreateSprim(TfToken const& typeId,
-                                           SdfPath const& sprimId)
+    SdfPath const& sprimId)
 {
     if (typeId == HdPrimTypeTokens->camera) {
-        return new HdCamera(sprimId);
+        return new Emscripten_Camera(sprimId, _renderDelegateInterface);
     } else if (typeId == HdPrimTypeTokens->material) {
         return new Emscripten_Material(sprimId, _renderDelegateInterface);
     } else if (typeId == HdPrimTypeTokens->domeLight ||
@@ -1194,7 +1343,7 @@ WebRenderDelegate::CreateSprim(TfToken const& typeId,
                typeId == HdPrimTypeTokens->rectLight ||
                typeId == HdPrimTypeTokens->simpleLight ||
                typeId == HdPrimTypeTokens->sphereLight) {
-        return new Emscripten_Light(sprimId);
+        return new Emscripten_Light(typeId, sprimId, _renderDelegateInterface);
     } else {
         TF_CODING_ERROR("Unknown Sprim Type %s", typeId.GetText());
     }
@@ -1206,7 +1355,7 @@ HdSprim *
 WebRenderDelegate::CreateFallbackSprim(TfToken const& typeId)
 {
     if (typeId == HdPrimTypeTokens->camera) {
-        return new HdCamera(SdfPath::EmptyPath());
+        return new Emscripten_Camera(SdfPath::EmptyPath(), _renderDelegateInterface);
     } else if (typeId == HdPrimTypeTokens->material) {
         return new Emscripten_Material(SdfPath::EmptyPath(), _renderDelegateInterface);
     } else if (typeId == HdPrimTypeTokens->domeLight ||
@@ -1217,7 +1366,7 @@ WebRenderDelegate::CreateFallbackSprim(TfToken const& typeId)
                typeId == HdPrimTypeTokens->rectLight ||
                typeId == HdPrimTypeTokens->simpleLight ||
                typeId == HdPrimTypeTokens->sphereLight) {
-        return new Emscripten_Light(SdfPath::EmptyPath());
+        return new Emscripten_Light(typeId, SdfPath::EmptyPath(), _renderDelegateInterface);
     } else {
         TF_CODING_ERROR("Unknown Sprim Type %s", typeId.GetText());
     }
