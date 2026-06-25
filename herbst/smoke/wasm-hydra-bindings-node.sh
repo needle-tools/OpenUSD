@@ -59,6 +59,17 @@ getUsdModule({
   if (buildInfo.modules?.hydraBridge !== true) {
     throw new Error("Build info does not report the Hydra bridge as enabled");
   }
+  for (const moduleName of ["usdImaging", "materialX", "openSubdiv", "usdGltf"]) {
+    if (buildInfo.modules?.[moduleName] !== true) {
+      throw new Error(`Build info does not report ${moduleName} as enabled`);
+    }
+  }
+  if (!String(buildInfo.toolchain?.emscripten ?? "").includes("Emscripten")) {
+    throw new Error(`Build info has an unexpected Emscripten version: ${buildInfo.toolchain?.emscripten}`);
+  }
+  if (!buildInfo.dependencies?.openSubdiv?.version) {
+    throw new Error("Build info does not report an OpenSubdiv version");
+  }
 
   try {
     USD.FS_createPath("/", "tmp", true, true);
