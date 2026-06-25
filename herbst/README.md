@@ -11,7 +11,7 @@ Run them from anywhere; each script computes the OpenUSD source root relative to
 - `smoke/adobe-gltf-plugin.sh`: verifies Adobe's glTF plugin against the native OpenUSD build.
 - `smoke/wasm-fetch-resolver-browser.js`: browser smoke test for upstream OpenUSD's installed wasm fetch resolver sample.
 - `smoke/wasm-fetch-resolver.sh`: starts the upstream wasm sample server and runs the browser smoke test.
-- `smoke/build-wasm-opensubdiv.sh`: builds OpenSubdiv 3.6.1 for wasm into the upstream wasm prefix.
+- `smoke/build-wasm-opensubdiv.sh`: builds OpenSubdiv for wasm into the upstream wasm prefix. By default it uses the OpenUSD 26.05 native build's vendored OpenSubdiv 3.6.1 source zip; pass `OPENSUBDIV_SRC_DIR=/Users/herbst/git/OpenSubdiv` explicitly when testing the checked-out OpenSubdiv repo.
 - `smoke/configure-wasm-hydra-imaging.sh`: configures a no-GPU wasm build with `usdImaging` enabled.
 - `smoke/build-wasm-hydra-imaging.sh`: builds the configured no-GPU wasm imaging tree.
 - `smoke/build-wasm-materialx-openusd.sh`: builds a minimal pthread-compatible wasm MaterialX dependency for OpenUSD's `usdMtlx` and `hdMtlx`.

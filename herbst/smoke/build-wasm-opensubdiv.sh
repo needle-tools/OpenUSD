@@ -9,17 +9,27 @@ activate_emsdk
 
 OPENSUBDIV_ZIP="${OPENSUBDIV_ZIP:-/Users/herbst/OpenUSD-26.05-native/src/v3_6_1.zip}"
 OPENSUBDIV_SRC_PARENT="${OPENSUBDIV_SRC_PARENT:-/Users/herbst/OpenSubdiv-3_6_1-wasm-src}"
-OPENSUBDIV_SRC_DIR="${OPENSUBDIV_SRC_PARENT}/OpenSubdiv-3_6_1"
+OPENSUBDIV_SRC_DIR="${OPENSUBDIV_SRC_DIR:-}"
 OPENSUBDIV_BUILD_DIR="${OPENSUBDIV_BUILD_DIR:-/Users/herbst/OpenSubdiv-3_6_1-wasm-build}"
 
-if [[ ! -f "${OPENSUBDIV_ZIP}" ]]; then
-  echo "Missing OpenSubdiv source zip: ${OPENSUBDIV_ZIP}" >&2
-  exit 1
+if [[ -n "${OPENSUBDIV_SRC_DIR}" ]]; then
+  if [[ ! -f "${OPENSUBDIV_SRC_DIR}/CMakeLists.txt" ]]; then
+    echo "OPENSUBDIV_SRC_DIR does not look like an OpenSubdiv source tree: ${OPENSUBDIV_SRC_DIR}" >&2
+    exit 1
+  fi
+else
+  if [[ ! -f "${OPENSUBDIV_ZIP}" ]]; then
+    echo "Missing OpenSubdiv source zip: ${OPENSUBDIV_ZIP}" >&2
+    exit 1
+  fi
+
+  rm -rf "${OPENSUBDIV_SRC_PARENT}"
+  mkdir -p "${OPENSUBDIV_SRC_PARENT}"
+  unzip -q "${OPENSUBDIV_ZIP}" -d "${OPENSUBDIV_SRC_PARENT}"
+  OPENSUBDIV_SRC_DIR="${OPENSUBDIV_SRC_PARENT}/OpenSubdiv-3_6_1"
 fi
 
-rm -rf "${OPENSUBDIV_SRC_PARENT}" "${OPENSUBDIV_BUILD_DIR}"
-mkdir -p "${OPENSUBDIV_SRC_PARENT}"
-unzip -q "${OPENSUBDIV_ZIP}" -d "${OPENSUBDIV_SRC_PARENT}"
+rm -rf "${OPENSUBDIV_BUILD_DIR}"
 
 emcmake cmake \
   -S "${OPENSUBDIV_SRC_DIR}" \
