@@ -8,14 +8,22 @@
 #include "pxr/base/gf/vec3f.h"
 #include "pxr/usd/sdf/assetPath.h"
 #include "pxr/usd/sdf/layer.h"
+#include "pxr/usd/sdf/primSpec.h"
+#include "pxr/usd/sdf/propertySpec.h"
 #include "pxr/usd/sdf/path.h"
 #include "pxr/usd/sdf/schema.h"
 #include "pxr/usd/sdf/types.h"
+#include "pxr/usd/pcp/errors.h"
+#include "pxr/usd/pcp/layerStack.h"
+#include "pxr/usd/pcp/node.h"
+#include "pxr/usd/usd/notice.h"
 #include "pxr/usd/usd/attribute.h"
 #include "pxr/usd/usd/editContext.h"
 #include "pxr/usd/usd/payloads.h"
 #include "pxr/usd/usd/prim.h"
+#include "pxr/usd/usd/primCompositionQuery.h"
 #include "pxr/usd/usd/relationship.h"
+#include "pxr/usd/usd/resolveInfo.h"
 #include "pxr/usd/usd/stage.h"
 #include "pxr/usd/usd/timeCode.h"
 #include "pxr/usd/usd/variantSets.h"
@@ -27,6 +35,8 @@
 #include <cmath>
 #include <fstream>
 #include <iterator>
+#include <map>
+#include <memory>
 #include <string>
 #include <vector>
 using namespace emscripten;
