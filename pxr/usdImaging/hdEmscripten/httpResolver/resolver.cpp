@@ -24,6 +24,16 @@ EM_ASYNC_JS(void, fetch_asset, (const char* route, int dataPtr), {
     const routeString = UTF8ToString(route);
     const heap32 = () => typeof GROWABLE_HEAP_I32 === 'function' ? GROWABLE_HEAP_I32() : HEAP32;
     const heap8 = () => typeof GROWABLE_HEAP_U8 === 'function' ? GROWABLE_HEAP_U8() : HEAPU8;
+    const analyzePath = Module['FS_analyzePath'] || (typeof FS !== 'undefined' ? FS.analyzePath.bind(FS) : null);
+    const readFileFromFs = Module['FS_readFile'] || (typeof FS !== 'undefined' ? FS.readFile.bind(FS) : null);
+    const writeBytes = (bytes) => {
+        const ptr = _malloc(bytes.byteLength);
+        heap8().set(bytes, ptr);
+        const view = heap32();
+        view[dataPtr >> 2] = ptr;
+        view[(dataPtr >> 2) + 1] = bytes.byteLength;
+        return ptr;
+    };
     const emitProgress = (detail) => {
         const payload = Object.assign({ url: routeString }, detail);
         Module['onAssetFetchProgress']?.(payload);
@@ -41,6 +51,29 @@ EM_ASYNC_JS(void, fetch_asset, (const char* route, int dataPtr), {
 
     try {
         emitProgress({ state: 'start', loaded: 0, total: 0 });
+        const filesystemCandidates = [];
+        try {
+            const base = globalThis?.location?.href || 'http://localhost/';
+            const resolvedUrl = new URL(routeString, base);
+            if (!globalThis?.location?.origin || resolvedUrl.origin === globalThis.location.origin) {
+                filesystemCandidates.push(decodeURIComponent(resolvedUrl.pathname));
+            }
+        }
+        catch (_) {}
+        filesystemCandidates.push(routeString);
+        for (const candidate of [...new Set(filesystemCandidates)]) {
+            try {
+                if (!analyzePath || !readFileFromFs) continue;
+                const analysis = analyzePath(candidate);
+                if (!analysis?.exists || analysis?.object?.isFolder) continue;
+                const bytes = readFileFromFs(candidate);
+                writeBytes(bytes);
+                emitProgress({ state: 'done', loaded: bytes.byteLength, total: bytes.byteLength });
+                return;
+            }
+            catch (_) {}
+        }
+
         const response = await fetch(routeString);
         if (!response.ok) {
             throw new Error('Fetch failed: ' + response.status + ' ' + response.statusText);
@@ -72,14 +105,10 @@ EM_ASYNC_JS(void, fetch_asset, (const char* route, int dataPtr), {
             bytes = new Uint8Array(await response.arrayBuffer());
         }
 
-        const ptr = _malloc(bytes.byteLength);
-        heap8().set(bytes, ptr);
-        const view = heap32();
-        view[dataPtr >> 2] = ptr;
-        view[(dataPtr >> 2) + 1] = bytes.byteLength;
+        writeBytes(bytes);
         emitProgress({ state: 'done', loaded: bytes.byteLength, total: total || bytes.byteLength });
     } catch (err) {
-        console.error("Error in fetch_asset: ", err);
+        console.error("Error in fetch_asset for", routeString, ": ", err);
         fail();
         emitProgress({ state: 'error', loaded: 0, total: 0, error: String(err?.message || err) });
     }
@@ -184,6 +213,16 @@ bool isHttpUrl(const std::string& path) {
     return path.rfind("http://", 0) == 0 || path.rfind("https://", 0) == 0;
 }
 
+bool pathStartsWithParentTraversal(const std::filesystem::path& path) {
+    auto native = path.native();
+    return native == ".." || native.rfind("../", 0) == 0 || native.rfind("..\\", 0) == 0;
+}
+
+bool isPathInside(const std::filesystem::path& path, const std::filesystem::path& root) {
+    auto relative = path.lexically_normal().lexically_relative(root.lexically_normal());
+    return !relative.empty() && !pathStartsWithParentTraversal(relative);
+}
+
 std::string extractHttpUrl(const std::string& path) {
     if (isHttpUrl(path)) {
         return path;
@@ -274,7 +313,15 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
     }
     else if (!baseUrl.empty()){
         std::filesystem::path systemPath = stringAssetPathCopy;
-        std::filesystem::path relativePath = std::filesystem::relative(systemPath, baseTempDir);
+        std::filesystem::path tempRoot = std::filesystem::temp_directory_path() / "1";
+        if (!isPathInside(systemPath, tempRoot)) {
+            return ArDefaultResolver::_Resolve(assetPath);
+        }
+
+        std::filesystem::path relativePath = systemPath.lexically_relative(baseTempDir);
+        if (relativePath.empty()) {
+            return ArDefaultResolver::_Resolve(assetPath);
+        }
 
         std::string route = combineUrl(baseUrl, relativePath);
         if (verbose){
@@ -312,8 +359,9 @@ std::shared_ptr<ArAsset> HttpResolver::_OpenAsset(const ArResolvedPath &resolved
         }
         else if (!baseUrl.empty() && !baseTempDir.empty()) {
             std::filesystem::path systemPath = path;
-            std::filesystem::path relativePath = std::filesystem::relative(systemPath, baseTempDir);
-            if (!relativePath.empty() && relativePath.native().rfind("..", 0) != 0) {
+            std::filesystem::path tempRoot = std::filesystem::temp_directory_path() / "1";
+            std::filesystem::path relativePath = systemPath.lexically_relative(baseTempDir);
+            if (isPathInside(systemPath, tempRoot) && !relativePath.empty()) {
                 route = combineUrl(baseUrl, relativePath.generic_string());
                 resolvedRoutes[path] = route;
             }
