@@ -30,6 +30,8 @@ git_dirty() {
   fi
 }
 
+emscripten_version="$(emcc --version | sed -n '1p')"
+
 rm -rf "${OPENUSD_WASM_HYDRA_MTLX_BUILD_DIR}" "${OPENUSD_WASM_HYDRA_MTLX_PREFIX}"
 
 emcmake cmake \
@@ -68,6 +70,7 @@ emcmake cmake \
   -DHD_EMSCRIPTEN_MATERIALX_REPO_DIRTY="$(git_dirty "${MATERIALX_REPO}")" \
   -DPXR_HD_EMSCRIPTEN_GLTF_PLUGIN_REPO_SHA="$(git_sha "${ADOBE_PLUGIN_REPO}")" \
   -DHD_EMSCRIPTEN_GLTF_PLUGIN_REPO_DIRTY="$(git_dirty "${ADOBE_PLUGIN_REPO}")" \
+  -DPXR_HD_EMSCRIPTEN_EMSCRIPTEN_VERSION="${emscripten_version}" \
   -DPXR_HD_EMSCRIPTEN_EMSDK_SHA="$(git_sha "${EMSDK_DIR}")" \
   -DHD_EMSCRIPTEN_EMSDK_DIRTY="$(git_dirty "${EMSDK_DIR}")" \
   -DMATERIALX_STDLIB_DIR="${MATERIALX_WASM_OPENUSD_PREFIX}/libraries" \

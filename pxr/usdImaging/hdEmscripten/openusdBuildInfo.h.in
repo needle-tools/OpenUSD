@@ -1,5 +1,5 @@
 #pragma once
 
-static constexpr char kHdEmscriptenOpenUsdBuildInfoJson[] = R"HD_EMSCRIPTEN_BUILD_INFO(
+static constexpr char kHdEmscriptenOpenUsdBuildInfoJson[] = R"HDUSDINFO(
 @HD_EMSCRIPTEN_BUILD_INFO_JSON@
-)HD_EMSCRIPTEN_BUILD_INFO";
+)HDUSDINFO";

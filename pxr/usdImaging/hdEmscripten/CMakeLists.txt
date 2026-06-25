@@ -62,11 +62,32 @@ _hd_emscripten_git_dirty(HD_EMSCRIPTEN_OPENUSD_GIT_DIRTY "${PROJECT_SOURCE_DIR}"
 _hd_emscripten_json_bool(HD_EMSCRIPTEN_BUILD_USD_IMAGING PXR_BUILD_USD_IMAGING)
 _hd_emscripten_json_bool(HD_EMSCRIPTEN_BUILD_HD_EMSCRIPTEN PXR_BUILD_HD_EMSCRIPTEN)
 _hd_emscripten_json_bool(HD_EMSCRIPTEN_ENABLE_MATERIALX PXR_ENABLE_MATERIALX_SUPPORT)
-_hd_emscripten_json_bool(HD_EMSCRIPTEN_ENABLE_OPENSUBDIV OPENSUBDIV_FOUND)
+if(OPENSUBDIV_FOUND OR OPENSUBDIV_OSDCPU_LIBRARY OR OpenSubdiv_DIR)
+    set(HD_EMSCRIPTEN_ENABLE_OPENSUBDIV "true")
+else()
+    set(HD_EMSCRIPTEN_ENABLE_OPENSUBDIV "false")
+endif()
 if(PXR_HD_EMSCRIPTEN_GLTF_PLUGIN_PREFIX)
     set(HD_EMSCRIPTEN_ENABLE_GLTF "true")
 else()
     set(HD_EMSCRIPTEN_ENABLE_GLTF "false")
+endif()
+if(NOT DEFINED PXR_HD_EMSCRIPTEN_EMSCRIPTEN_VERSION)
+    set(PXR_HD_EMSCRIPTEN_EMSCRIPTEN_VERSION "${CMAKE_CXX_COMPILER_VERSION}")
+endif()
+if(NOT OPENSUBDIV_VERSION AND OPENSUBDIV_INCLUDE_DIR
+        AND EXISTS "${OPENSUBDIV_INCLUDE_DIR}/opensubdiv/version.h")
+    file(STRINGS
+        "${OPENSUBDIV_INCLUDE_DIR}/opensubdiv/version.h"
+        _hd_emscripten_opensubdiv_version_line
+        REGEX "^#define OPENSUBDIV_VERSION v[0-9_]+")
+    if(_hd_emscripten_opensubdiv_version_line)
+        string(REGEX REPLACE
+            "^#define OPENSUBDIV_VERSION v([0-9]+)_([0-9]+)_([0-9]+).*"
+            "\\1.\\2.\\3"
+            OPENSUBDIV_VERSION
+            "${_hd_emscripten_opensubdiv_version_line}")
+    endif()
 endif()
 if(NOT DEFINED PXR_HD_EMSCRIPTEN_MATERIALX_REPO_SHA)
     set(PXR_HD_EMSCRIPTEN_MATERIALX_REPO_SHA "")

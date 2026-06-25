@@ -7,7 +7,7 @@
     "gitDirty": @HD_EMSCRIPTEN_OPENUSD_GIT_DIRTY@
   },
   "toolchain": {
-    "emscripten": "@CMAKE_CXX_COMPILER_VERSION@",
+    "emscripten": "@PXR_HD_EMSCRIPTEN_EMSCRIPTEN_VERSION@",
     "cxxCompiler": "@CMAKE_CXX_COMPILER@",
     "cmakeBuildType": "@CMAKE_BUILD_TYPE@"
   },
