@@ -25,6 +25,8 @@
 #include "pxr/base/gf/vec2f.h"
 #include "pxr/base/vt/typeHeaders.h"
 #include "pxr/imaging/hd/bufferArray.h"
+#include "pxr/imaging/hd/camera.h"
+#include "pxr/imaging/hd/light.h"
 #include "pxr/imaging/hd/material.h"
 #include "pxr/imaging/hd/mesh.h"
 #include "pxr/imaging/hd/points.h"
@@ -1035,6 +1037,29 @@ private:
     Emscripten_Material &operator =(const Emscripten_Material &) = delete;
 };
 
+class Emscripten_Light final : public HdLight {
+public:
+    Emscripten_Light(SdfPath const& id) : HdLight(id) {}
+    virtual ~Emscripten_Light() = default;
+
+    virtual void Sync(HdSceneDelegate *sceneDelegate,
+                      HdRenderParam   *renderParam,
+                      HdDirtyBits     *dirtyBits) override
+    {
+        *dirtyBits = HdLight::Clean;
+    }
+
+    virtual HdDirtyBits GetInitialDirtyBitsMask() const override
+    {
+        return HdLight::AllDirty;
+    }
+
+private:
+    Emscripten_Light() = delete;
+    Emscripten_Light(const Emscripten_Light &) = delete;
+    Emscripten_Light &operator=(const Emscripten_Light &) = delete;
+};
+
 const TfTokenVector WebRenderDelegate::SUPPORTED_RPRIM_TYPES =
 {
     HdPrimTypeTokens->mesh,
@@ -1043,7 +1068,16 @@ const TfTokenVector WebRenderDelegate::SUPPORTED_RPRIM_TYPES =
 
 const TfTokenVector WebRenderDelegate::SUPPORTED_SPRIM_TYPES =
 {
-    HdPrimTypeTokens->material
+    HdPrimTypeTokens->camera,
+    HdPrimTypeTokens->material,
+    HdPrimTypeTokens->domeLight,
+    HdPrimTypeTokens->cylinderLight,
+    HdPrimTypeTokens->diskLight,
+    HdPrimTypeTokens->distantLight,
+    HdPrimTypeTokens->light,
+    HdPrimTypeTokens->rectLight,
+    HdPrimTypeTokens->simpleLight,
+    HdPrimTypeTokens->sphereLight
 };
 
 const TfTokenVector WebRenderDelegate::SUPPORTED_BPRIM_TYPES =
@@ -1148,8 +1182,19 @@ HdSprim *
 WebRenderDelegate::CreateSprim(TfToken const& typeId,
                                            SdfPath const& sprimId)
 {
-    if (typeId == HdPrimTypeTokens->material) {
+    if (typeId == HdPrimTypeTokens->camera) {
+        return new HdCamera(sprimId);
+    } else if (typeId == HdPrimTypeTokens->material) {
         return new Emscripten_Material(sprimId, _renderDelegateInterface);
+    } else if (typeId == HdPrimTypeTokens->domeLight ||
+               typeId == HdPrimTypeTokens->cylinderLight ||
+               typeId == HdPrimTypeTokens->diskLight ||
+               typeId == HdPrimTypeTokens->distantLight ||
+               typeId == HdPrimTypeTokens->light ||
+               typeId == HdPrimTypeTokens->rectLight ||
+               typeId == HdPrimTypeTokens->simpleLight ||
+               typeId == HdPrimTypeTokens->sphereLight) {
+        return new Emscripten_Light(sprimId);
     } else {
         TF_CODING_ERROR("Unknown Sprim Type %s", typeId.GetText());
     }
@@ -1160,8 +1205,19 @@ WebRenderDelegate::CreateSprim(TfToken const& typeId,
 HdSprim *
 WebRenderDelegate::CreateFallbackSprim(TfToken const& typeId)
 {
-    if (typeId == HdPrimTypeTokens->material) {
+    if (typeId == HdPrimTypeTokens->camera) {
+        return new HdCamera(SdfPath::EmptyPath());
+    } else if (typeId == HdPrimTypeTokens->material) {
         return new Emscripten_Material(SdfPath::EmptyPath(), _renderDelegateInterface);
+    } else if (typeId == HdPrimTypeTokens->domeLight ||
+               typeId == HdPrimTypeTokens->cylinderLight ||
+               typeId == HdPrimTypeTokens->diskLight ||
+               typeId == HdPrimTypeTokens->distantLight ||
+               typeId == HdPrimTypeTokens->light ||
+               typeId == HdPrimTypeTokens->rectLight ||
+               typeId == HdPrimTypeTokens->simpleLight ||
+               typeId == HdPrimTypeTokens->sphereLight) {
+        return new Emscripten_Light(SdfPath::EmptyPath());
     } else {
         TF_CODING_ERROR("Unknown Sprim Type %s", typeId.GetText());
     }
