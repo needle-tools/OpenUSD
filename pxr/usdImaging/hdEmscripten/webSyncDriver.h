@@ -89,7 +89,7 @@ public:
     {
         HdRprimCollection collection = HdRprimCollection(
                 HdTokens->geometry,
-                HdReprSelector(HdReprTokens->hull));
+                HdReprSelector(HdReprTokens->refined));
 
         TfTokenVector renderTags;
         renderTags.push_back(HdRenderTagTokens->geometry);
@@ -111,7 +111,7 @@ public:
     {
         HdRprimCollection collection = HdRprimCollection(
                 HdTokens->geometry,
-                HdReprSelector(HdReprTokens->hull));
+                HdReprSelector(HdReprTokens->refined));
 
         TfTokenVector renderTags;
         renderTags.push_back(HdRenderTagTokens->geometry);
@@ -152,7 +152,7 @@ public:
 
         HdRprimCollection collection = HdRprimCollection(
                 HdTokens->geometry,
-                HdReprSelector(HdReprTokens->hull));
+                HdReprSelector(HdReprTokens->refined));
 
         TfTokenVector renderTags;
         renderTags.push_back(HdRenderTagTokens->geometry);
@@ -278,6 +278,7 @@ private:
         _renderIndex = HdRenderIndex::New(&_renderDelegate, HdDriverVector());
         TF_VERIFY(_renderIndex != nullptr);
         _delegate = new UsdImagingDelegate(_renderIndex, delegateId);
+        _delegate->SetRefineLevelFallback(2);
 
         _stage = usdStage;
         if (!_stage) {

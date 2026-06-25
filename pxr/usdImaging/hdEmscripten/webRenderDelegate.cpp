@@ -37,8 +37,13 @@
 #include "pxr/imaging/hd/materialNetwork2Interface.h"
 #include "pxr/imaging/hd/smoothNormals.h"
 #include "pxr/imaging/hd/vtBufferSource.h"
+#include "pxr/imaging/pxOsd/refinerFactory.h"
+#include "pxr/imaging/pxOsd/tokens.h"
 #include "pxr/usd/ar/resolver.h"
 #include "pxr/usd/sdf/assetPath.h"
+
+#include <opensubdiv/far/primvarRefiner.h>
+#include <opensubdiv/far/topologyLevel.h>
 
 #if __has_include("pxr/imaging/hdMtlx/hdMtlx.h") && __has_include(<MaterialXFormat/XmlIo.h>)
 #include "pxr/imaging/hdMtlx/hdMtlx.h"
@@ -46,7 +51,9 @@
 #define HD_EMSCRIPTEN_HAS_MATERIALX 1
 #endif
 
+#include <algorithm>
 #include <iostream>
+#include <vector>
 
 using namespace emscripten;
 
@@ -254,6 +261,13 @@ public:
         // Materials need to be synced before primvars, to allow the JS side to apply primvar information like
         // displayColor if no other material is set.
         bool fetchedTopology = false;
+        const bool pointsDirty =
+            HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, HdTokens->points);
+        const bool topologyDirty = HdChangeTracker::IsTopologyDirty(*dirtyBits, id);
+        const bool subdivTagsDirty =
+            HdChangeTracker::IsSubdivTagsDirty(*dirtyBits, id);
+        const bool displayStyleDirty =
+            HdChangeTracker::IsDisplayStyleDirty(*dirtyBits, id);
         if (*dirtyBits & HdChangeTracker::DirtyMaterialId) {
             auto materialId = delegate->GetMaterialId(id);
 
@@ -287,20 +301,16 @@ public:
         }
 
         // Update points
-        if (HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, HdTokens->points)) {
+        if (pointsDirty) {
             VtValue value = delegate->Get(id, HdTokens->points);
             _points = value.Get<VtVec3fArray>();
             _normalsValid = false;
-            runInMainThread([&]() {
-                _rPrim.call<void>("updatePoints", val(typed_memory_view(3 * _points.size(), reinterpret_cast<float*>(_points.data()))));
-            });
         }
 
-        if (HdChangeTracker::IsTopologyDirty(*dirtyBits, id)) {
+        if (topologyDirty) {
             // When pulling a new topology, we don't want to overwrite the
             // refine level or subdiv tags, which are provided separately by the
             // scene delegate, so we save and restore them.
-            // TODO: This was copied from the Embree mesh class. We don't actually pull subdiv and refine information, since we're not handling that kind of geometry. We always only create a triangulated mesh.
             PxOsdSubdivTags subdivTags = _topology.GetSubdivTags();
 
             if (!fetchedTopology){
@@ -308,16 +318,19 @@ public:
                 _topology = HdMeshTopology(delegate->GetMeshTopology(id), refineLevel);
             }
             _topology.SetSubdivTags(subdivTags);
+        }
 
-            // Triangulate the input faces.
-            if (_meshUtil != NULL) delete _meshUtil;
-            _meshUtil = new HdMeshUtil(&_topology, GetId());
-            _meshUtil->ComputeTriangleIndices(&_triangulatedIndices, &_trianglePrimitiveParams);
+        if (subdivTagsDirty && _topology.GetRefineLevel() > 0) {
+            _topology.SetSubdivTags(delegate->GetSubdivTags(id));
+        }
 
-            runInMainThread([&]() {
-                _rPrim.call<void>("updateIndices", val(typed_memory_view(3 * _triangulatedIndices.size(), reinterpret_cast<int32_t*>(_triangulatedIndices.data()))));
-            });
+        if (displayStyleDirty) {
+            HdDisplayStyle const displayStyle = delegate->GetDisplayStyle(id);
+            _topology = HdMeshTopology(_topology, displayStyle.refineLevel);
+        }
 
+        if (pointsDirty || topologyDirty || subdivTagsDirty || displayStyleDirty) {
+            _UpdateDisplayGeometry();
             _normalsValid = false;
             _adjacencyValid = false;
         }
@@ -337,15 +350,17 @@ public:
         //    form of the topology that helps calculate smooth normals quickly.
         // 2. If the points are dirty, update the smooth normal buffer itself.
         if (_smoothNormals && !_adjacencyValid) {
-            _adjacency.BuildAdjacencyTable(&_topology);
+            const HdMeshTopology &displayTopology = _GetDisplayTopology();
+            _adjacency.BuildAdjacencyTable(&displayTopology);
             _adjacencyValid = true;
             // If we rebuilt the adjacency table, force a rebuild of normals.
             _normalsValid = false;
         }
 
         if (_smoothNormals && !_normalsValid) {
+            const VtVec3fArray &displayPoints = _GetDisplayPoints();
             _computedNormals = Hd_SmoothNormals::ComputeSmoothNormals(
-                &_adjacency, _points.size(), _points.cdata());
+                &_adjacency, displayPoints.size(), displayPoints.cdata());
             _normalsValid = true;
             runInMainThread([&]() {
                 _rPrim.call<void>("updateNormals", val(typed_memory_view(3 * _computedNormals.size(), reinterpret_cast<float*>(_computedNormals.data()))));
@@ -388,6 +403,20 @@ protected:
     }
 
 private:
+    struct _OsdVertex {
+        float position[3] = {0.0f, 0.0f, 0.0f};
+
+        void Clear(void * = nullptr) {
+            position[0] = position[1] = position[2] = 0.0f;
+        }
+
+        void AddWithWeight(_OsdVertex const &src, float weight) {
+            position[0] += src.position[0] * weight;
+            position[1] += src.position[1] * weight;
+            position[2] += src.position[2] * weight;
+        }
+    };
+
     TfToken _typeId;
     emscripten::val _renderDelegateInterface;
     emscripten::val _rPrim;
@@ -398,13 +427,141 @@ private:
     VtVec3fArray _computedNormals;
 
     HdMeshTopology _topology;
+    HdMeshTopology _displayTopology;
     GfMatrix4f _transform;
     VtVec3fArray _points;
+    VtVec3fArray _displayPoints;
     Hd_VertexAdjacency _adjacency;
 
     bool _adjacencyValid;
     bool _normalsValid;
     bool _smoothNormals;
+    bool _usingRefinedTopology = false;
+
+    HdMeshTopology const &_GetDisplayTopology() const {
+        return _usingRefinedTopology ? _displayTopology : _topology;
+    }
+
+    VtVec3fArray const &_GetDisplayPoints() const {
+        return _usingRefinedTopology ? _displayPoints : _points;
+    }
+
+    bool _BuildRefinedTopology()
+    {
+        _usingRefinedTopology = false;
+        _displayPoints.clear();
+
+        const int refineLevel = std::min(_topology.GetRefineLevel(), 3);
+        if (_points.empty() ||
+            refineLevel <= 0 ||
+            _topology.GetScheme() == PxOsdOpenSubdivTokens->none) {
+            return false;
+        }
+
+        PxOsdTopologyRefinerSharedPtr refiner =
+            PxOsdRefinerFactory::Create(_topology.GetPxOsdMeshTopology(), TfToken());
+        if (!refiner) {
+            TF_WARN("Failed to create OpenSubdiv refiner for <%s>.",
+                GetId().GetText());
+            return false;
+        }
+
+        OpenSubdiv::Far::TopologyRefiner::UniformOptions options(refineLevel);
+        options.fullTopologyInLastLevel = true;
+        refiner->RefineUniform(options);
+
+        const int coarseVertexCount = refiner->GetLevel(0).GetNumVertices();
+        if (static_cast<size_t>(coarseVertexCount) > _points.size()) {
+            TF_WARN("OpenSubdiv topology for <%s> references %d coarse points, "
+                "but Hydra provided %zu points.",
+                GetId().GetText(), coarseVertexCount, _points.size());
+            return false;
+        }
+
+        std::vector<_OsdVertex> vertices(refiner->GetNumVerticesTotal());
+        for (int i = 0; i < coarseVertexCount; ++i) {
+            vertices[i].position[0] = _points[i][0];
+            vertices[i].position[1] = _points[i][1];
+            vertices[i].position[2] = _points[i][2];
+        }
+
+        OpenSubdiv::Far::PrimvarRefiner primvarRefiner(*refiner);
+        _OsdVertex *src = vertices.data();
+        for (int level = 1; level <= refineLevel; ++level) {
+            _OsdVertex *dst =
+                src + refiner->GetLevel(level - 1).GetNumVertices();
+            primvarRefiner.Interpolate(level, src, dst);
+            src = dst;
+        }
+
+        OpenSubdiv::Far::TopologyLevel const &lastLevel =
+            refiner->GetLevel(refineLevel);
+        const int refinedVertexCount = lastLevel.GetNumVertices();
+        const int firstRefinedVertex =
+            refiner->GetNumVerticesTotal() - refinedVertexCount;
+
+        _displayPoints.resize(refinedVertexCount);
+        for (int i = 0; i < refinedVertexCount; ++i) {
+            _OsdVertex const &vertex = vertices[firstRefinedVertex + i];
+            _displayPoints[i] = GfVec3f(
+                vertex.position[0],
+                vertex.position[1],
+                vertex.position[2]);
+        }
+
+        VtIntArray faceVertexCounts;
+        VtIntArray faceVertexIndices;
+        const int faceCount = lastLevel.GetNumFaces();
+        for (int face = 0; face < faceCount; ++face) {
+            OpenSubdiv::Far::ConstIndexArray faceVertices =
+                lastLevel.GetFaceVertices(face);
+            if (faceVertices.size() < 3) {
+                continue;
+            }
+
+            faceVertexCounts.push_back(static_cast<int>(faceVertices.size()));
+            for (int vertex = 0; vertex < faceVertices.size(); ++vertex) {
+                faceVertexIndices.push_back(faceVertices[vertex]);
+            }
+        }
+
+        _displayTopology = HdMeshTopology(
+            PxOsdOpenSubdivTokens->none,
+            _topology.GetOrientation(),
+            faceVertexCounts,
+            faceVertexIndices,
+            0);
+        _usingRefinedTopology = true;
+        return true;
+    }
+
+    void _UpdateDisplayGeometry()
+    {
+        _BuildRefinedTopology();
+        const HdMeshTopology &displayTopology = _GetDisplayTopology();
+        const VtVec3fArray &displayPoints = _GetDisplayPoints();
+
+        if (_meshUtil != NULL) {
+            delete _meshUtil;
+        }
+        _meshUtil = new HdMeshUtil(&displayTopology, GetId());
+        _meshUtil->ComputeTriangleIndices(
+            &_triangulatedIndices, &_trianglePrimitiveParams);
+
+        runInMainThread([&]() {
+            _rPrim.call<void>(
+                "updatePoints",
+                val(typed_memory_view(
+                    3 * displayPoints.size(),
+                    reinterpret_cast<float*>(
+                        const_cast<GfVec3f*>(displayPoints.cdata())))));
+            _rPrim.call<void>(
+                "updateIndices",
+                val(typed_memory_view(
+                    3 * _triangulatedIndices.size(),
+                    reinterpret_cast<int32_t*>(_triangulatedIndices.data()))));
+        });
+    }
 
     // Send primvar data to JS
     void _SendPrimvar(const VtValue &value, const std::string &name, const HdInterpolation &interpolation)

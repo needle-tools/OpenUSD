@@ -147,6 +147,7 @@ _pxr_target_link_libraries(${BINDINGS_NAME}
     usdUtils
     usdSkel
     usdShaders
+    pxOsd
     httpResolver
     ${HD_EMSCRIPTEN_MATERIALX_LIBS}
     ${HD_EMSCRIPTEN_GLTF_PLUGIN_LIBS}
