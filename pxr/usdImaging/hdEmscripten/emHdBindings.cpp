@@ -38,8 +38,8 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
 
   class_<pxr::HdWebSyncDriver>("HdWebSyncDriver")
     .constructor<emscripten::val, std::string>()
-    .function("Draw", &pxr::HdWebSyncDriver::Draw)
-    .function("Repopulate", &pxr::HdWebSyncDriver::Repopulate)
+    .function("Draw", &pxr::HdWebSyncDriver::Draw, async())
+    .function("Repopulate", &pxr::HdWebSyncDriver::Repopulate, async())
     .function("getFile", &pxr::HdWebSyncDriver::getFile)
     .function("HasStage", &pxr::HdWebSyncDriver::HasStage)
     .function("GetStage", optional_override([](pxr::HdWebSyncDriver& driver) {

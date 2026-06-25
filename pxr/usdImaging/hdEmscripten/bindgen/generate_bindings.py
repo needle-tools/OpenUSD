@@ -24,6 +24,15 @@ def _return_type(entry: dict) -> str:
     return ts_return
 
 
+def _policies(entry: dict, allow_raw: bool) -> str:
+    policies = []
+    if allow_raw:
+        policies.append("allow_raw_pointers()")
+    if entry.get("tsMayAsync"):
+        policies.append("async()")
+    return f", {', '.join(policies)}" if policies else ""
+
+
 def _lambda(cpp_type: str, method: dict) -> tuple[str, bool]:
     op = method["op"]
     cpp = method.get("cpp", "")
@@ -342,7 +351,7 @@ def generate_cpp(manifest: dict) -> str:
         lines.append(f"  class_<{cls['cppType']}>(\"{cls['jsName']}\")")
         for method in cls["methods"]:
             expr, allow_raw = _lambda(cls["cppType"], method)
-            suffix = ", allow_raw_pointers()" if allow_raw else ""
+            suffix = _policies(method, allow_raw)
             lines.append(f"    .function(\"{method['jsName']}\", {expr}{suffix})")
         lines.append("    ;")
         lines.append("")
@@ -354,7 +363,7 @@ def generate_cpp(manifest: dict) -> str:
         lines.append("")
     for function in manifest.get("functions", []):
         expr, allow_raw = _function_expr(function)
-        suffix = ", allow_raw_pointers()" if allow_raw else ""
+        suffix = _policies(function, allow_raw)
         lines.append(f"  function(\"{function['jsName']}\", {expr}{suffix});")
 
     lines.extend([

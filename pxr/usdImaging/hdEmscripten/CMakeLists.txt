@@ -106,13 +106,20 @@ set(BUILD_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/environments/helicopter-landing-pad-vis-4K.hdr
 )
 
-if(PXR_WASM_NODE)
+set(HD_EMSCRIPTEN_EMBED_RESOURCES TRUE)
+if(HD_EMSCRIPTEN_EMBED_RESOURCES)
     list(TRANSFORM RESOURCE_PARAMETERS REPLACE "-preload" "-embed")
-else()
-list(APPEND BUILD_FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/${BINDINGS_NAME}.data"
-    "${CMAKE_CURRENT_BINARY_DIR}/${BINDINGS_NAME}.wasm"
-)
+endif()
+
+if(NOT PXR_WASM_NODE)
+    list(APPEND BUILD_FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/${BINDINGS_NAME}.wasm"
+    )
+    if(NOT HD_EMSCRIPTEN_EMBED_RESOURCES)
+        list(APPEND BUILD_FILES
+            "${CMAKE_CURRENT_BINARY_DIR}/${BINDINGS_NAME}.data"
+        )
+    endif()
 endif()
 
 set(HD_EMSCRIPTEN_MATERIALX_LIBS "")
@@ -163,10 +170,10 @@ set_target_properties(${BINDINGS_NAME}
 target_compile_options(${BINDINGS_NAME} PRIVATE "SHELL: -lembind -pthread")
 target_link_options(${BINDINGS_NAME} PRIVATE "SHELL: -Oz -s EXPORT_NAME='getUsdModule' \
     -s MODULARIZE=1 -lembind -s PTHREAD_POOL_SIZE=10 -s ASYNCIFY \
+    -s ASYNCIFY_STACK_SIZE=1048576 \
     -sIMPORTED_MEMORY=1 --pre-js ${CMAKE_CURRENT_SOURCE_DIR}/js/MemoryConfiguration.js  \
     --post-js ${CMAKE_CURRENT_SOURCE_DIR}/js/ViewerRuntimeExports.js \
-    --extern-post-js ${CMAKE_CURRENT_SOURCE_DIR}/js/ViewerExternRuntimeExports.js \
-    -s ASYNCIFY_REMOVE=['__vfprintf_internal','__fseeko_unlocked','*::itanium_demangle::*','*VtArray*','*_Clear*','*dlfree*','*TfType*','*Tf_Registry*','*Tf_Post*','*tao::PXR_INTERNAL_NS_pegtl*','*UsdObject*','*TfSmallVector*','*TfMallocTag*','*__cxa_guard_acquire*,'*UsdSchema*','*Usd_CrateFile*','*TfEnum*','*TfErrorMark*','*VtStreamOutArray*','*SdfSpec*']")
+    --extern-post-js ${CMAKE_CURRENT_SOURCE_DIR}/js/ViewerExternRuntimeExports.js")
 
 install(
     TARGETS ${BINDINGS_NAME}

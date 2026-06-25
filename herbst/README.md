@@ -15,6 +15,7 @@ Run them from anywhere; each script computes the OpenUSD source root relative to
 - `smoke/configure-wasm-hydra-imaging.sh`: configures a no-GPU wasm build with `usdImaging` enabled.
 - `smoke/build-wasm-hydra-imaging.sh`: builds the configured no-GPU wasm imaging tree.
 - `smoke/build-wasm-materialx-openusd.sh`: builds a minimal pthread-compatible wasm MaterialX dependency for OpenUSD's `usdMtlx` and `hdMtlx`.
+- `smoke/build-wasm-adobe-gltf-plugin.sh`: builds Adobe's glTF plugin as wasm static archives against the current OpenUSD wasm prefix.
 - `smoke/configure-wasm-hydra-materialx.sh`: configures the no-GPU wasm Hydra build with `PXR_ENABLE_MATERIALX_SUPPORT=ON`.
 - `smoke/build-wasm-hydra-materialx.sh`: builds, installs, and smokes the MaterialX-enabled wasm Hydra bundle.
 - `smoke/wasm-hydra-bindings-node.sh`: loads the installed `emHdBindings.js` bundle in Node and verifies the Hydra APIs usd-viewer needs.
@@ -53,10 +54,9 @@ The wasm Hydra bridge now builds on OpenUSD 26.05 and installs the viewer bundle
 Installed files:
 
 - `emHdBindings.js`
-- `emHdBindings.data`
 - `emHdBindings.wasm`
 
-Modern Emscripten does not emit a separate `emHdBindings.worker.js` sidecar for this build. The generated bundle exports `globalThis["NEEDLE:USD:GET"]` and the filesystem helpers expected by `usd-viewer`.
+Modern Emscripten does not emit a separate `emHdBindings.worker.js` sidecar for this build. With Emscripten 4.0.23 this checkpoint embeds resources directly, so there is no `emHdBindings.data` sidecar either. The generated bundle exports `globalThis["NEEDLE:USD:GET"]` and the filesystem helpers expected by `usd-viewer`.
 
 The Node smoke test verifies:
 
@@ -83,6 +83,7 @@ Reproduce the probe with:
 
 ```sh
 ./herbst/smoke/build-wasm-materialx-openusd.sh
+./herbst/smoke/build-wasm-adobe-gltf-plugin.sh
 ./herbst/smoke/configure-wasm-hydra-materialx.sh
 ./herbst/smoke/build-wasm-hydra-materialx.sh
 ```
@@ -96,6 +97,6 @@ Observed result:
 - The wasm render delegate advertises `mtlx` as a material render context and shader source type, so OpenUSD creates real Hydra material sprims for MaterialX-authored materials.
 - `wasm-hydra-bindings-node.sh` passes against `/Users/herbst/OpenUSD-26.05-wasm-hydra-mtlx-probe`, including generated authoring, variants, animated attributes, USDA export, USDZ package creation, and binary readback.
 - The installed `usdMtlx` resources contain 56 `.mtlx` library files, including `gltf_pbr.mtlx`, `open_pbr_surface.mtlx`, and `usd_preview_surface.mtlx`.
-- The MaterialX-enabled installed sidecars are approximately `190K` for `emHdBindings.js`, `2.2M` for `emHdBindings.data`, and `29M` for `emHdBindings.wasm`.
+- The MaterialX/glTF-enabled Emscripten 4.0.23 sidecars are approximately `164K` for `emHdBindings.js` and `33M` for `emHdBindings.wasm`.
 
-One source fix was required: `_install_resource_files` now preserves absolute source resource paths when producing Emscripten embed/preload arguments. Without that, absolute `MATERIALX_STDLIB_DIR` entries were incorrectly prefixed with `pxr/usd/usdMtlx/`.
+Current source fixes include embedded hdEmscripten/USD/MaterialX resources for Emscripten 4.0.23, async Embind policies for generated APIs that can cross browser fetches, explicit async `Draw()`/`Repopulate()` bindings, and a larger Asyncify stack. The old broad `ASYNCIFY_REMOVE` pruning was removed because USD/Sdf/Crate paths can fetch assets during composition.
