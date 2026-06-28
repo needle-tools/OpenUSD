@@ -96,6 +96,25 @@ bool _HasJsMethod(emscripten::val const& object, char const* name) {
     return !method.isUndefined() && method.typeOf().as<std::string>() == "function";
 }
 
+std::string _CullStyleToString(HdCullStyle cullStyle)
+{
+    switch (cullStyle) {
+        case HdCullStyleDontCare:
+            return "dontCare";
+        case HdCullStyleNothing:
+            return "nothing";
+        case HdCullStyleBack:
+            return "back";
+        case HdCullStyleFront:
+            return "front";
+        case HdCullStyleBackUnlessDoubleSided:
+            return "backUnlessDoubleSided";
+        case HdCullStyleFrontUnlessDoubleSided:
+            return "frontUnlessDoubleSided";
+    }
+    return "dontCare";
+}
+
 template <class Vec>
 emscripten::val _GfVecToJsVal(Vec const &vec)
 {
@@ -476,6 +495,15 @@ public:
                 visible,
                 renderTag.GetString());
         });
+
+        if (HdChangeTracker::IsDoubleSidedDirty(*dirtyBits, id) ||
+            HdChangeTracker::IsCullStyleDirty(*dirtyBits, id)) {
+            const bool doubleSided = IsDoubleSided(delegate);
+            const std::string cullStyle = _CullStyleToString(GetCullStyle(delegate));
+            runInMainThread([&]() {
+                _rPrim.call<void>("setCullStyle", doubleSided, cullStyle);
+            });
+        }
 
         // Materials need to be synced before primvars, to allow the JS side to apply primvar information like
         // displayColor if no other material is set.

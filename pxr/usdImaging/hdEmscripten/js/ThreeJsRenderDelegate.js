@@ -1,3 +1,20 @@
+function cullStyleToThreeSide(doubleSided, cullStyle) {
+  switch (cullStyle) {
+    case "nothing":
+      return THREE.DoubleSide;
+    case "back":
+      return THREE.FrontSide;
+    case "front":
+      return THREE.BackSide;
+    case "frontUnlessDoubleSided":
+      return doubleSided ? THREE.DoubleSide : THREE.BackSide;
+    case "backUnlessDoubleSided":
+    case "dontCare":
+    default:
+      return doubleSided ? THREE.DoubleSide : THREE.FrontSide;
+  }
+}
+
 class TextureRegistry {
   constructor(basename) {
     this.basename = basename;
@@ -74,6 +91,7 @@ class HydraMesh {
     this._colors = undefined;
     this._uvs = undefined;
     this._indices = undefined;
+    this._side = THREE.DoubleSide;
 
     const material = new THREE.MeshPhysicalMaterial( {
       side: THREE.DoubleSide,
@@ -132,6 +150,16 @@ class HydraMesh {
     console.log('Material: ' + materialId);
     if (this._interface.materials[materialId]) {
       this._mesh.material = this._interface.materials[materialId]._material;
+      this._mesh.material.side = this._side;
+      this._mesh.material.needsUpdate = true;
+    }
+  }
+
+  setCullStyle(doubleSided, cullStyle) {
+    this._side = cullStyleToThreeSide(Boolean(doubleSided), String(cullStyle || "dontCare"));
+    if (this._mesh?.material) {
+      this._mesh.material.side = this._side;
+      this._mesh.material.needsUpdate = true;
     }
   }
 
