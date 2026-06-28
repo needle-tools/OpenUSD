@@ -90,7 +90,7 @@ public:
     {
         HdRprimCollection collection = HdRprimCollection(
                 HdTokens->geometry,
-                HdReprSelector(HdReprTokens->refined));
+                HdReprSelector(HdReprTokens->smoothHull));
 
         _Init(UsdStage::Open(usdFilePath),
               collection,
@@ -109,7 +109,7 @@ public:
     {
         HdRprimCollection collection = HdRprimCollection(
                 HdTokens->geometry,
-                HdReprSelector(HdReprTokens->refined));
+                HdReprSelector(HdReprTokens->smoothHull));
 
         _Init(usdStage,
               collection,
@@ -147,7 +147,7 @@ public:
 
         HdRprimCollection collection = HdRprimCollection(
                 HdTokens->geometry,
-                HdReprSelector(HdReprTokens->refined));
+                HdReprSelector(HdReprTokens->smoothHull));
 
         _Init(_stage,
               collection,
@@ -307,7 +307,6 @@ private:
         _renderIndex = HdRenderIndex::New(&_renderDelegate, HdDriverVector());
         TF_VERIFY(_renderIndex != nullptr);
         _delegate = new UsdImagingDelegate(_renderIndex, delegateId);
-        _delegate->SetRefineLevelFallback(2);
 
         _stage = usdStage;
         if (!_stage) {

@@ -424,6 +424,8 @@ public:
      , _meshUtil(NULL)
      , _adjacencyValid(false)
      , _normalsValid(false)
+     , _reprFlatShadingEnabled(false)
+     , _displayStyleFlatShadingEnabled(false)
     {
       _rPrim = _renderDelegateInterface.call<val>("createRPrim", std::string(typeId.GetText()), id.GetAsString());
     }
@@ -574,6 +576,7 @@ public:
         if (displayStyleDirty) {
             HdDisplayStyle const displayStyle = delegate->GetDisplayStyle(id);
             _topology = HdMeshTopology(_topology, displayStyle.refineLevel);
+            _displayStyleFlatShadingEnabled = displayStyle.flatShadingEnabled;
         }
 
         if (pointsDirty || topologyDirty || subdivTagsDirty || displayStyleDirty) {
@@ -587,10 +590,7 @@ public:
             _SyncPrimvars(delegate, *dirtyBits);
         }
 
-        // TODO: Various sources, such as surface representation description, the topology scheme, or the availablity
-        // of authored normals (as a primvar) can impact whether we want to calculate smooth normals or not. We ignore
-        // all this and simply always generate them.
-        _smoothNormals = true;
+        _smoothNormals = _UseSmoothNormals(_GetDisplayTopology());
 
         // Update the smooth normals in steps:
         // 1. If the topology is dirty, update the adjacency table, a processed
@@ -612,6 +612,10 @@ public:
             runInMainThread([&]() {
                 _rPrim.call<void>("updateNormals", val(typed_memory_view(3 * _computedNormals.size(), reinterpret_cast<float*>(_computedNormals.data()))));
             });
+        }
+        else if (!_smoothNormals && !_normalsValid) {
+            _UpdateFlatGeometricNormals();
+            _normalsValid = true;
         }
 
         if (HdChangeTracker::IsTransformDirty(*dirtyBits, id)) {
@@ -679,6 +683,11 @@ protected:
         if (it == _reprs.end()) {
             _reprs.emplace_back(reprToken, HdReprSharedPtr());
         }
+
+        _reprFlatShadingEnabled = false;
+        for (HdMeshReprDesc const &desc : _GetReprDesc(reprToken)) {
+            _reprFlatShadingEnabled |= desc.flatShadingEnabled;
+        }
     }
 
 private:
@@ -715,6 +724,8 @@ private:
     bool _adjacencyValid;
     bool _normalsValid;
     bool _smoothNormals;
+    bool _reprFlatShadingEnabled;
+    bool _displayStyleFlatShadingEnabled;
     bool _usingRefinedTopology = false;
 
     HdMeshTopology const &_GetDisplayTopology() const {
@@ -723,6 +734,60 @@ private:
 
     VtVec3fArray const &_GetDisplayPoints() const {
         return _usingRefinedTopology ? _displayPoints : _points;
+    }
+
+    bool _UseSmoothNormals(HdMeshTopology const &topology) const
+    {
+        // Mirrors Storm's HdStMesh::_UseSmoothNormals behavior for the
+        // topology/display-style cases the web delegate materializes itself.
+        if (_displayStyleFlatShadingEnabled ||
+            _reprFlatShadingEnabled ||
+            topology.GetScheme() == PxOsdOpenSubdivTokens->none ||
+            topology.GetScheme() == PxOsdOpenSubdivTokens->bilinear) {
+            return false;
+        }
+        return true;
+    }
+
+    void _UpdateFlatGeometricNormals()
+    {
+        const HdMeshTopology &displayTopology = _GetDisplayTopology();
+        const VtVec3fArray &displayPoints = _GetDisplayPoints();
+        VtVec3fArray orderedNormals(3 * _triangulatedIndices.size());
+        const bool flip =
+            displayTopology.GetOrientation() != HdTokens->rightHanded;
+
+        for (size_t i = 0; i < _triangulatedIndices.size(); ++i) {
+            GfVec3i const &triangle = _triangulatedIndices[i];
+            if (triangle[0] < 0 || triangle[1] < 0 || triangle[2] < 0 ||
+                static_cast<size_t>(triangle[0]) >= displayPoints.size() ||
+                static_cast<size_t>(triangle[1]) >= displayPoints.size() ||
+                static_cast<size_t>(triangle[2]) >= displayPoints.size()) {
+                continue;
+            }
+
+            GfVec3f normal = GfCross(
+                displayPoints[triangle[1]] - displayPoints[triangle[0]],
+                displayPoints[triangle[2]] - displayPoints[triangle[0]]);
+            if (flip) {
+                normal *= -1.0f;
+            }
+            if (normal.Normalize() == 0.0f) {
+                normal = GfVec3f(0.0f, 0.0f, 1.0f);
+            }
+
+            orderedNormals[3 * i + 0] = normal;
+            orderedNormals[3 * i + 1] = normal;
+            orderedNormals[3 * i + 2] = normal;
+        }
+
+        runInMainThread([&]() {
+            _rPrim.call<void>(
+                "updateOrderedNormals",
+                val(typed_memory_view(
+                    3 * orderedNormals.size(),
+                    reinterpret_cast<float*>(orderedNormals.data()))));
+        });
     }
 
     bool _BuildRefinedTopology()

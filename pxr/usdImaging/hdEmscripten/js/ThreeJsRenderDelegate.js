@@ -145,6 +145,11 @@ class HydraMesh {
     this.updateOrder(this._normals, 'normal');
   }
 
+  updateOrderedNormals(normals) {
+    this._normals = normals.slice();
+    this._geometry.setAttribute('normal', new THREE.Float32BufferAttribute(this._normals, 3));
+  }
+
   // This is always called before prims are updated
   setMaterial(materialId) {
     console.log('Material: ' + materialId);
