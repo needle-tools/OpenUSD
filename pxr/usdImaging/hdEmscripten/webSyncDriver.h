@@ -307,6 +307,7 @@ private:
         _renderIndex = HdRenderIndex::New(&_renderDelegate, HdDriverVector());
         TF_VERIFY(_renderIndex != nullptr);
         _delegate = new UsdImagingDelegate(_renderIndex, delegateId);
+        _delegate->SetRefineLevelFallback(2);
 
         _stage = usdStage;
         if (!_stage) {
