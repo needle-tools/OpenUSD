@@ -590,7 +590,7 @@ public:
             _SyncPrimvars(delegate, *dirtyBits);
         }
 
-        _smoothNormals = _UseSmoothNormals(_GetDisplayTopology());
+        _smoothNormals = _UseSmoothNormals();
 
         // Update the smooth normals in steps:
         // 1. If the topology is dirty, update the adjacency table, a processed
@@ -736,14 +736,14 @@ private:
         return _usingRefinedTopology ? _displayPoints : _points;
     }
 
-    bool _UseSmoothNormals(HdMeshTopology const &topology) const
+    bool _UseSmoothNormals() const
     {
         // Mirrors Storm's HdStMesh::_UseSmoothNormals behavior for the
         // topology/display-style cases the web delegate materializes itself.
         if (_displayStyleFlatShadingEnabled ||
             _reprFlatShadingEnabled ||
-            topology.GetScheme() == PxOsdOpenSubdivTokens->none ||
-            topology.GetScheme() == PxOsdOpenSubdivTokens->bilinear) {
+            _topology.GetScheme() == PxOsdOpenSubdivTokens->none ||
+            _topology.GetScheme() == PxOsdOpenSubdivTokens->bilinear) {
             return false;
         }
         return true;
