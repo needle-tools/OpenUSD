@@ -108,7 +108,7 @@ EM_ASYNC_JS(void, fetch_asset, (const char* route, int dataPtr), {
         writeBytes(bytes);
         emitProgress({ state: 'done', loaded: bytes.byteLength, total: total || bytes.byteLength });
     } catch (err) {
-        console.error("Error in fetch_asset for", routeString, ": ", err);
+        console.warn("Failed to fetch asset", routeString, ": ", err);
         fail();
         emitProgress({ state: 'error', loaded: 0, total: 0, error: String(err?.message || err) });
     }
@@ -147,7 +147,7 @@ std::filesystem::path HttpResolver::FetchAndSaveAsset(const std::string& route,
         fetch_asset(route.c_str(), reinterpret_cast<int>(data));
         if (data->ptrToContent == 0 || data->length == 0) {
             delete data;
-            return filePath;
+            return std::filesystem::path();
         }
         char *assetContentCString = reinterpret_cast<char *>(data->ptrToContent);
         saveBinaryAssetContentToFile(assetContentCString, data->length, filePath);
@@ -158,7 +158,7 @@ std::filesystem::path HttpResolver::FetchAndSaveAsset(const std::string& route,
     }
     catch (const std::exception& e){
         std::cout << "Error: " << e.what() << std::endl;
-        return filePath;
+        return std::filesystem::path();
     }
 
     addToLoadedFiles(filePath.c_str());
@@ -309,6 +309,9 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
         setBaseTempDir(tempDir.generic_string() + "/1/1/1/1/1/1/");
         auto filePath = baseTempDir + fullHttpRouteAsPath.filename().generic_string();
         savedAssetFilePath = FetchAndSaveAsset(stringAssetPathCopy, filePath);
+        if (savedAssetFilePath.empty()) {
+            return ArResolvedPath();
+        }
         resolvedRoutes[savedAssetFilePath.generic_string()] = stringAssetPathCopy;
     }
     else if (!baseUrl.empty()){
@@ -329,6 +332,9 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
         }
 
         savedAssetFilePath = FetchAndSaveAsset(route, systemPath);
+        if (savedAssetFilePath.empty()) {
+            return ArResolvedPath();
+        }
         resolvedRoutes[savedAssetFilePath.generic_string()] = route;
         if (verbose){
             std::cout << "Assumed to exist now, trying from baseUrl: " << systemPath << std::endl;
@@ -368,7 +374,9 @@ std::shared_ptr<ArAsset> HttpResolver::_OpenAsset(const ArResolvedPath &resolved
         }
 
         if (!route.empty()) {
-            FetchAndSaveAsset(route, path);
+            if (FetchAndSaveAsset(route, path).empty()) {
+                return nullptr;
+            }
         }
     }
 
