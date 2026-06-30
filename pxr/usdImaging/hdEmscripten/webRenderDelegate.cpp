@@ -705,6 +705,19 @@ private:
         }
     };
 
+    template <class VecT>
+    struct _OsdPrimvar {
+        VecT value = VecT(0.0f);
+
+        void Clear(void * = nullptr) {
+            value = VecT(0.0f);
+        }
+
+        void AddWithWeight(_OsdPrimvar const &src, float weight) {
+            value += src.value * weight;
+        }
+    };
+
     TfToken _typeId;
     emscripten::val _renderDelegateInterface;
     emscripten::val _rPrim;
@@ -745,6 +758,189 @@ private:
             _topology.GetScheme() == PxOsdOpenSubdivTokens->none ||
             _topology.GetScheme() == PxOsdOpenSubdivTokens->bilinear) {
             return false;
+        }
+        return true;
+    }
+
+    PxOsdTopologyRefinerSharedPtr _CreateTopologyRefiner(
+        std::vector<VtIntArray> const *fvarTopologies = nullptr) const
+    {
+        const int refineLevel = std::min(_topology.GetRefineLevel(), 3);
+        if (refineLevel <= 0 ||
+            _topology.GetScheme() == PxOsdOpenSubdivTokens->none) {
+            return nullptr;
+        }
+
+        PxOsdTopologyRefinerSharedPtr refiner = fvarTopologies
+            ? PxOsdRefinerFactory::Create(
+                _topology.GetPxOsdMeshTopology(), *fvarTopologies, TfToken())
+            : PxOsdRefinerFactory::Create(
+                _topology.GetPxOsdMeshTopology(), TfToken());
+        if (!refiner) {
+            return nullptr;
+        }
+
+        OpenSubdiv::Far::TopologyRefiner::UniformOptions options(refineLevel);
+        options.fullTopologyInLastLevel = true;
+        refiner->RefineUniform(options);
+        return refiner;
+    }
+
+    template <class VecT, class ArrayT>
+    bool _RefineVertexOrVaryingPrimvar(
+        ArrayT const &coarseValues,
+        ArrayT *refinedValues,
+        HdInterpolation interpolation) const
+    {
+        if (!_usingRefinedTopology || coarseValues.empty()) {
+            return false;
+        }
+
+        PxOsdTopologyRefinerSharedPtr refiner = _CreateTopologyRefiner();
+        if (!refiner) {
+            return false;
+        }
+
+        const int coarseVertexCount = refiner->GetLevel(0).GetNumVertices();
+        if (static_cast<size_t>(coarseVertexCount) > coarseValues.size()) {
+            TF_WARN("OpenSubdiv topology for <%s> references %d coarse points, "
+                "but primvar only has %zu values.",
+                GetId().GetText(), coarseVertexCount, coarseValues.size());
+            return false;
+        }
+
+        std::vector<_OsdPrimvar<VecT>> values(refiner->GetNumVerticesTotal());
+        for (int i = 0; i < coarseVertexCount; ++i) {
+            values[i].value = coarseValues[i];
+        }
+
+        OpenSubdiv::Far::PrimvarRefiner primvarRefiner(*refiner);
+        _OsdPrimvar<VecT> *src = values.data();
+        const int refineLevel = std::min(_topology.GetRefineLevel(), 3);
+        for (int level = 1; level <= refineLevel; ++level) {
+            _OsdPrimvar<VecT> *dst =
+                src + refiner->GetLevel(level - 1).GetNumVertices();
+            if (interpolation == HdInterpolationVarying) {
+                primvarRefiner.InterpolateVarying(level, src, dst);
+            } else {
+                primvarRefiner.Interpolate(level, src, dst);
+            }
+            src = dst;
+        }
+
+        OpenSubdiv::Far::TopologyLevel const &lastLevel =
+            refiner->GetLevel(refineLevel);
+        const int refinedVertexCount = lastLevel.GetNumVertices();
+        const int firstRefinedVertex =
+            refiner->GetNumVerticesTotal() - refinedVertexCount;
+
+        refinedValues->resize(refinedVertexCount);
+        for (int i = 0; i < refinedVertexCount; ++i) {
+            (*refinedValues)[i] = values[firstRefinedVertex + i].value;
+        }
+        return true;
+    }
+
+    template <class VecT, class ArrayT>
+    bool _RefineFaceVaryingPrimvar(
+        ArrayT const &coarseValues,
+        VtIntArray const &fvarIndices,
+        ArrayT *refinedValues) const
+    {
+        if (!_usingRefinedTopology || coarseValues.empty()) {
+            return false;
+        }
+
+        const HdMeshTopology &topology = _topology;
+        if (topology.GetScheme() == PxOsdOpenSubdivTokens->none) {
+            return false;
+        }
+
+        const size_t numFaceVaryings =
+            topology.GetFaceVertexIndices().size();
+        if (fvarIndices.size() < numFaceVaryings) {
+            TF_WARN("Face-varying topology for <%s> has only %zu values, "
+                "but the mesh topology expects %zu.",
+                GetId().GetText(), fvarIndices.size(), numFaceVaryings);
+            return false;
+        }
+
+        int maxIndex = -1;
+        for (int index : fvarIndices) {
+            maxIndex = std::max(maxIndex, index);
+        }
+        if (maxIndex < 0) {
+            return false;
+        }
+        if (static_cast<size_t>(maxIndex) >= coarseValues.size()) {
+            TF_WARN("Face-varying topology for <%s> references value %d, "
+                "but primvar only has %zu values.",
+                GetId().GetText(), maxIndex, coarseValues.size());
+            return false;
+        }
+
+        std::vector<VtIntArray> fvarTopologies(1);
+        fvarTopologies[0].assign(
+            fvarIndices.begin(),
+            fvarIndices.begin() + numFaceVaryings);
+
+        PxOsdTopologyRefinerSharedPtr refiner =
+            _CreateTopologyRefiner(&fvarTopologies);
+        if (!refiner || refiner->GetNumFVarChannels() == 0) {
+            return false;
+        }
+
+        const int channel = 0;
+        OpenSubdiv::Far::TopologyLevel const &baseLevel =
+            refiner->GetLevel(0);
+        const int coarseFVarCount = baseLevel.GetNumFVarValues(channel);
+        if (static_cast<size_t>(coarseFVarCount) > coarseValues.size()) {
+            TF_WARN("OpenSubdiv face-varying topology for <%s> references "
+                "%d values, but primvar only has %zu values.",
+                GetId().GetText(), coarseFVarCount, coarseValues.size());
+            return false;
+        }
+
+        std::vector<_OsdPrimvar<VecT>> values(
+            refiner->GetNumFVarValuesTotal(channel));
+        for (int i = 0; i < coarseFVarCount; ++i) {
+            values[i].value = coarseValues[i];
+        }
+
+        OpenSubdiv::Far::PrimvarRefiner primvarRefiner(*refiner);
+        _OsdPrimvar<VecT> *src = values.data();
+        const int refineLevel = std::min(_topology.GetRefineLevel(), 3);
+        for (int level = 1; level <= refineLevel; ++level) {
+            _OsdPrimvar<VecT> *dst =
+                src + refiner->GetLevel(level - 1).GetNumFVarValues(channel);
+            primvarRefiner.InterpolateFaceVarying(level, src, dst, channel);
+            src = dst;
+        }
+
+        OpenSubdiv::Far::TopologyLevel const &lastLevel =
+            refiner->GetLevel(refineLevel);
+        const int refinedFVarCount =
+            lastLevel.GetNumFVarValues(channel);
+        const int firstRefinedFVar =
+            refiner->GetNumFVarValuesTotal(channel) - refinedFVarCount;
+
+        refinedValues->clear();
+        refinedValues->reserve(lastLevel.GetNumFaceVertices());
+        const int faceCount = lastLevel.GetNumFaces();
+        for (int face = 0; face < faceCount; ++face) {
+            OpenSubdiv::Far::ConstIndexArray faceValues =
+                lastLevel.GetFaceFVarValues(face, channel);
+            for (int i = 0; i < faceValues.size(); ++i) {
+                const int valueIndex = faceValues[i];
+                if (valueIndex < 0 || valueIndex >= refinedFVarCount) {
+                    TF_WARN("OpenSubdiv face-varying topology for <%s> "
+                        "references invalid refined value %d.",
+                        GetId().GetText(), valueIndex);
+                    return false;
+                }
+                refinedValues->push_back(
+                    values[firstRefinedFVar + valueIndex].value);
+            }
         }
         return true;
     }
@@ -802,17 +998,12 @@ private:
             return false;
         }
 
-        PxOsdTopologyRefinerSharedPtr refiner =
-            PxOsdRefinerFactory::Create(_topology.GetPxOsdMeshTopology(), TfToken());
+        PxOsdTopologyRefinerSharedPtr refiner = _CreateTopologyRefiner();
         if (!refiner) {
             TF_WARN("Failed to create OpenSubdiv refiner for <%s>.",
                 GetId().GetText());
             return false;
         }
-
-        OpenSubdiv::Far::TopologyRefiner::UniformOptions options(refineLevel);
-        options.fullTopologyInLastLevel = true;
-        refiner->RefineUniform(options);
 
         const int coarseVertexCount = refiner->GetLevel(0).GetNumVertices();
         if (static_cast<size_t>(coarseVertexCount) > _points.size()) {
@@ -907,20 +1098,76 @@ private:
         });
     }
 
-    // Send primvar data to JS
-    void _SendPrimvar(const VtValue &value, const std::string &name, const HdInterpolation &interpolation)
+    template <class VecT, class ArrayT>
+    bool _RefinePrimvarData(
+        ArrayT *primvarData,
+        HdInterpolation interpolation,
+        VtIntArray const *fvarIndices = nullptr) const
     {
-        const std::string &ip = InterpolationStrings.at(interpolation);
+        ArrayT refinedData;
+        if ((interpolation == HdInterpolationVertex ||
+             interpolation == HdInterpolationVarying) &&
+            _RefineVertexOrVaryingPrimvar<VecT>(
+                *primvarData, &refinedData, interpolation)) {
+            *primvarData = refinedData;
+            return true;
+        } else if (interpolation == HdInterpolationFaceVarying &&
+                   fvarIndices &&
+                   _RefineFaceVaryingPrimvar<VecT>(
+                       *primvarData, *fvarIndices, &refinedData)) {
+            *primvarData = refinedData;
+            return true;
+        }
+        return false;
+    }
+
+    VtValue _GetRefinedPrimvarValue(
+        const VtValue &value,
+        const HdInterpolation &interpolation,
+        VtIntArray const *fvarIndices = nullptr) const
+    {
         if (value.CanCast<VtVec2fArray>()) {
             VtVec2fArray primvarData = value.Get<VtVec2fArray>();
+            if (_RefinePrimvarData<GfVec2f>(
+                    &primvarData, interpolation, fvarIndices)) {
+                return VtValue(primvarData);
+            }
+        } else if (value.CanCast<VtVec3fArray>()) {
+            VtVec3fArray primvarData = value.Get<VtVec3fArray>();
+            if (_RefinePrimvarData<GfVec3f>(
+                    &primvarData, interpolation, fvarIndices)) {
+                return VtValue(primvarData);
+            }
+        } else if (value.CanCast<VtVec4fArray>()) {
+            VtVec4fArray primvarData = value.Get<VtVec4fArray>();
+            if (_RefinePrimvarData<GfVec4f>(
+                    &primvarData, interpolation, fvarIndices)) {
+                return VtValue(primvarData);
+            }
+        }
+        return value;
+    }
+
+    // Send primvar data to JS
+    void _SendPrimvar(
+        const VtValue &value,
+        const std::string &name,
+        const HdInterpolation &interpolation,
+        VtIntArray const *fvarIndices = nullptr)
+    {
+        const std::string &ip = InterpolationStrings.at(interpolation);
+        VtValue refinedValue =
+            _GetRefinedPrimvarValue(value, interpolation, fvarIndices);
+        if (refinedValue.CanCast<VtVec2fArray>()) {
+            VtVec2fArray primvarData = refinedValue.Get<VtVec2fArray>();
             _rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(2 * primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 2, ip);
         }
-        if (value.CanCast<VtVec3fArray>()) {
-            VtVec3fArray primvarData = value.Get<VtVec3fArray>();
+        if (refinedValue.CanCast<VtVec3fArray>()) {
+            VtVec3fArray primvarData = refinedValue.Get<VtVec3fArray>();
             _rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(3 * primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 3, ip);
         }
-        if (value.CanCast<VtVec4fArray>()) {
-            VtVec4fArray primvarData = value.Get<VtVec4fArray>();
+        if (refinedValue.CanCast<VtVec4fArray>()) {
+            VtVec4fArray primvarData = refinedValue.Get<VtVec4fArray>();
             _rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(4 * primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 4, ip);
         }
     }
@@ -948,7 +1195,32 @@ private:
 
                         switch(ip) {
                             case HdInterpolationFaceVarying: {
-                                HdVtBufferSource buffer(primvar.name, value);
+                                VtIntArray fvarIndices;
+                                if (primvar.indexed) {
+                                    value = GetIndexedPrimvar(
+                                        delegate, primvar.name, &fvarIndices);
+                                    if (fvarIndices.empty()) {
+                                        TF_WARN("Indexed face-varying primvar "
+                                            "%s on <%s> has no indices.",
+                                            primvar.name.GetText(),
+                                            GetId().GetText());
+                                        continue;
+                                    }
+                                } else {
+                                    const size_t numFaceVaryings =
+                                        _topology.GetFaceVertexIndices().size();
+                                    fvarIndices.resize(numFaceVaryings);
+                                    for (size_t i = 0; i < numFaceVaryings; ++i) {
+                                        fvarIndices[i] = static_cast<int>(i);
+                                    }
+                                }
+
+                                VtValue refinedValue =
+                                    _GetRefinedPrimvarValue(
+                                        value, ip, &fvarIndices);
+
+                                HdVtBufferSource buffer(
+                                    primvar.name, refinedValue);
 
                                 VtValue triangulated;
                                 HdMeshComputationResult result =
@@ -965,13 +1237,14 @@ private:
 
                                 _SendPrimvar(
                                     result == HdMeshComputationResult::Unchanged
-                                        ? value
+                                        ? refinedValue
                                         : triangulated,
                                     primvar.name.GetString(),
                                     ip);
                                 break;
                             }
                             case HdInterpolationConstant:
+                            case HdInterpolationVarying:
                             case HdInterpolationVertex: {
                                 _SendPrimvar(value, primvar.name.GetString(), ip);
                                 break;
