@@ -72,6 +72,14 @@ if(PXR_HD_EMSCRIPTEN_GLTF_PLUGIN_PREFIX)
 else()
     set(HD_EMSCRIPTEN_ENABLE_GLTF "false")
 endif()
+if(NOT DEFINED PXR_HD_EMSCRIPTEN_GLTF_DRACO)
+    set(PXR_HD_EMSCRIPTEN_GLTF_DRACO OFF)
+endif()
+if(PXR_HD_EMSCRIPTEN_GLTF_PLUGIN_PREFIX AND PXR_HD_EMSCRIPTEN_GLTF_DRACO)
+    set(HD_EMSCRIPTEN_ENABLE_GLTF_DRACO "true")
+else()
+    set(HD_EMSCRIPTEN_ENABLE_GLTF_DRACO "false")
+endif()
 if(NOT DEFINED PXR_HD_EMSCRIPTEN_EMSCRIPTEN_VERSION)
     set(PXR_HD_EMSCRIPTEN_EMSCRIPTEN_VERSION "${CMAKE_CXX_COMPILER_VERSION}")
 endif()
@@ -175,6 +183,7 @@ if(PXR_HD_EMSCRIPTEN_GLTF_PLUGIN_PREFIX)
     set(_gltfPluginLib "${_gltfPluginPrefix}/lib/libusdGltf.a")
     set(_gltfPluginUtilsLib "${_gltfPluginPrefix}/lib/libfileformatUtils.a")
     set(_gltfPluginTinyGltfLib "${_gltfPluginPrefix}/lib/libtinygltf.a")
+    set(_gltfPluginDracoLib "${_gltfPluginPrefix}/lib/libdraco.a")
 
     foreach(_gltfRequiredFile
             "${_gltfPluginResources}"
@@ -194,6 +203,13 @@ if(PXR_HD_EMSCRIPTEN_GLTF_PLUGIN_PREFIX)
         "${_gltfPluginUtilsLib}"
         "${_gltfPluginTinyGltfLib}"
     )
+    if(PXR_HD_EMSCRIPTEN_GLTF_DRACO)
+        if(NOT EXISTS "${_gltfPluginDracoLib}")
+            message(FATAL_ERROR
+                "PXR_HD_EMSCRIPTEN_GLTF_DRACO is ON, but ${_gltfPluginDracoLib} was not found.")
+        endif()
+        list(APPEND HD_EMSCRIPTEN_GLTF_PLUGIN_LIBS "${_gltfPluginDracoLib}")
+    endif()
 endif()
 
 list(APPEND RESOURCE_PARAMETERS "--preload-file ${PROJECT_BINARY_DIR}/plugins_plugInfo.json@/usd/plugInfo.json")

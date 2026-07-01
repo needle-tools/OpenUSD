@@ -16,7 +16,8 @@
     "hydraBridge": @HD_EMSCRIPTEN_BUILD_HD_EMSCRIPTEN@,
     "materialX": @HD_EMSCRIPTEN_ENABLE_MATERIALX@,
     "openSubdiv": @HD_EMSCRIPTEN_ENABLE_OPENSUBDIV@,
-    "usdGltf": @HD_EMSCRIPTEN_ENABLE_GLTF@
+    "usdGltf": @HD_EMSCRIPTEN_ENABLE_GLTF@,
+    "usdGltfDraco": @HD_EMSCRIPTEN_ENABLE_GLTF_DRACO@
   },
   "dependencies": {
     "openSubdiv": {
@@ -30,7 +31,8 @@
     "usdGltf": {
       "prefix": "@PXR_HD_EMSCRIPTEN_GLTF_PLUGIN_PREFIX@",
       "gitSha": "@PXR_HD_EMSCRIPTEN_GLTF_PLUGIN_REPO_SHA@",
-      "gitDirty": @HD_EMSCRIPTEN_GLTF_PLUGIN_REPO_DIRTY@
+      "gitDirty": @HD_EMSCRIPTEN_GLTF_PLUGIN_REPO_DIRTY@,
+      "draco": @HD_EMSCRIPTEN_ENABLE_GLTF_DRACO@
     },
     "emsdk": {
       "gitSha": "@PXR_HD_EMSCRIPTEN_EMSDK_SHA@",

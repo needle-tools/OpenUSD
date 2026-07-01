@@ -15,7 +15,10 @@ fi
 
 gltf_plugin_args=()
 if [[ -d "${ADOBE_PLUGIN_WASM_PREFIX}" ]]; then
-  gltf_plugin_args=(-DPXR_HD_EMSCRIPTEN_GLTF_PLUGIN_PREFIX="${ADOBE_PLUGIN_WASM_PREFIX}")
+  gltf_plugin_args=(
+    -DPXR_HD_EMSCRIPTEN_GLTF_PLUGIN_PREFIX="${ADOBE_PLUGIN_WASM_PREFIX}"
+    -DPXR_HD_EMSCRIPTEN_GLTF_DRACO=ON
+  )
 fi
 
 git_sha() {

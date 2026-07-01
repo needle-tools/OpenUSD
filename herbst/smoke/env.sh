@@ -26,6 +26,7 @@ export PATH="${CMAKE_BIN_DIR}:${PATH}"
 activate_emsdk() {
   # shellcheck source=/dev/null
   source "${EMSDK_DIR}/emsdk_env.sh" >/tmp/emsdk-env.log
+  export EMSCRIPTEN="${EMSCRIPTEN:-${EMSDK_DIR}/upstream/emscripten}"
   export PATH="${CMAKE_BIN_DIR}:${PATH}"
 }
 

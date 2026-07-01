@@ -31,7 +31,9 @@ emcmake cmake \
   -DUSD_FILEFORMATS_ENABLE_SPZ=OFF \
   -DUSD_FILEFORMATS_ENABLE_STL=OFF \
   -DUSD_FILEFORMATS_ENABLE_SBSAR=OFF \
-  -DUSD_FILEFORMATS_ENABLE_DRACO=OFF \
+  -DUSD_FILEFORMATS_ENABLE_DRACO=ON \
+  -DUSD_FILEFORMATS_FETCH_DRACO=ON \
+  -DDRACO_JS_GLUE=OFF \
   -DUSD_FILEFORMATS_ENABLE_OPENIMAGEIO=OFF \
   -DUSD_FILEFORMATS_FETCH_TINYGLTF=ON \
   -DUSD_FILEFORMATS_FETCH_ZLIB=OFF \
@@ -45,5 +47,24 @@ cmake --build "${ADOBE_PLUGIN_WASM_PREFIX}-build" \
   --target usdGltf \
   --parallel "${BUILD_PARALLELISM:-8}"
 
-cmake --install "${ADOBE_PLUGIN_WASM_PREFIX}-build" \
-  --config Release
+mkdir -p \
+  "${ADOBE_PLUGIN_WASM_PREFIX}/lib" \
+  "${ADOBE_PLUGIN_WASM_PREFIX}/plugin/usd/usdGltf/resources"
+
+draco_lib="$(find "${ADOBE_PLUGIN_WASM_PREFIX}-build" -name 'libdraco.a' -print -quit)"
+if [[ -z "${draco_lib}" ]]; then
+  echo "Draco was enabled, but libdraco.a was not produced." >&2
+  exit 1
+fi
+
+cp "${ADOBE_PLUGIN_WASM_PREFIX}-build/gltf/src/libusdGltf.a" \
+  "${ADOBE_PLUGIN_WASM_PREFIX}/lib/libusdGltf.a"
+cp "${ADOBE_PLUGIN_WASM_PREFIX}-build/utils/libfileformatUtils.a" \
+  "${ADOBE_PLUGIN_WASM_PREFIX}/lib/libfileformatUtils.a"
+cp "${ADOBE_PLUGIN_WASM_PREFIX}-build/_deps/tinygltf-build/libtinygltf.a" \
+  "${ADOBE_PLUGIN_WASM_PREFIX}/lib/libtinygltf.a"
+cp "${draco_lib}" "${ADOBE_PLUGIN_WASM_PREFIX}/lib/libdraco.a"
+cp "${ADOBE_PLUGIN_WASM_PREFIX}-build/gltf/src/plugInfo.json" \
+  "${ADOBE_PLUGIN_WASM_PREFIX}/plugin/usd/usdGltf/resources/plugInfo.json"
+cp "${ADOBE_PLUGIN_REPO}/gltf/src/plugInfo.root.json" \
+  "${ADOBE_PLUGIN_WASM_PREFIX}/plugin/usd/plugInfo.json"
