@@ -1,0 +1,26 @@
+#usda 1.0
+(
+    defaultPrim = "Root"
+    metersPerUnit = 1
+    upAxis = "Y"
+)
+
+def Xform "Root"
+{
+    def Sphere "Sphere" (
+        prepend apiSchemas = ["MaterialBindingAPI"]
+    )
+    {
+        rel material:binding = </Root/Looks/LocalNodeMaterial>
+        double radius = 1
+    }
+
+    def Scope "Looks"
+    {
+        def Material "LocalNodeMaterial" (
+            prepend references = @materials/referenced_local_nodedef.mtlx@</MaterialX/Materials/LocalNodeMaterial>
+        )
+        {
+        }
+    }
+}

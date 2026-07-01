@@ -1,0 +1,84 @@
+<?xml version="1.0"?>
+<materialx version="1.39" xmlns:xi="http://www.w3.org/2001/XInclude">
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/pbrlib/pbrlib_defs.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/pbrlib/pbrlib_ng.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/pbrlib/genglsl/pbrlib_genglsl_impl.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/pbrlib/genmdl/pbrlib_genmdl_impl.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/pbrlib/genosl/pbrlib_genosl_impl.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/pbrlib/genmsl/pbrlib_genmsl_impl.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/disney_principled.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/open_pbr_surface.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/usd_preview_surface.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/standard_surface.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/gltf_pbr.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/genglsl/open_pbr_surface.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/genglsl/standard_surface.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/genglsl/gltf_pbr.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/translation/open_pbr_to_standard_surface.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/translation/standard_surface_to_open_pbr.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/translation/standard_surface_to_usd.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/translation/standard_surface_to_gltf_pbr.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/genmdl/open_pbr_surface.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/lama/lama_sheen.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/lama/lama_sss.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/lama/lama_dielectric.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/lama/lama_iridescence.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/lama/lama_diffuse.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/lama/lama_mix.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/lama/lama_add.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/lama/lama_conductor.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/lama/lama_emission.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/lama/lama_surface.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/lama/lama_generalized_schlick.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/lama/lama_translucent.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/bxdf/lama/lama_layer.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/targets/genosl.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/targets/genmsl.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/targets/genglsl.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/targets/essl.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/targets/genmdl.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/nprlib/nprlib_ng.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/nprlib/nprlib_defs.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/nprlib/genglsl/nprlib_genglsl_impl.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/nprlib/genmdl/nprlib_genmdl_impl.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/nprlib/genosl/nprlib_genosl_impl.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/nprlib/genmsl/nprlib_genmsl_impl.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/cmlib/cmlib_defs.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/cmlib/cmlib_ng.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/stdlib/stdlib_ng.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/stdlib/stdlib_defs.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/stdlib/genglsl/stdlib_genglsl_impl.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/stdlib/genmdl/stdlib_genmdl_impl.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/stdlib/genosl/stdlib_genosl_impl.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/stdlib/genmsl/stdlib_genmsl_impl.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/lights/lights_defs.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/lights/genglsl/lights_genglsl_impl.mtlx" />
+  <xi:include href="/Users/herbst/OpenUSD-26.05-native/libraries/lights/genmsl/lights_genmsl_impl.mtlx" />
+  <UsdPreviewSurface name="Surface" type="surfaceshader">
+    <input name="diffuseColor" type="color3" output="diffuseColor_out" nodegraph="NG_Anonymized" />
+    <input name="emissiveColor" type="color3" output="emissiveColor_out" nodegraph="NG_Anonymized" />
+  </UsdPreviewSurface>
+  <surfacematerial name="PositionMaterial" type="material">
+    <input name="surfaceshader" type="surfaceshader" nodename="Surface" />
+  </surfacematerial>
+  <nodegraph name="NG_Anonymized">
+    <convert name="N1NDconvertfloatcolor3emissiveColor" type="color3" nodedef="ND_convert_float_color3">
+      <input name="in" type="float" nodename="N2NDsubtractfloatin" />
+    </convert>
+    <subtract name="N2NDsubtractfloatin" type="float" nodedef="ND_subtract_float">
+      <input name="in2" type="float" nodename="N3NDdistancevector3in2" />
+    </subtract>
+    <distance name="N3NDdistancevector3in2" type="float" nodedef="ND_distance_vector3">
+      <input name="in1" type="vector3" nodename="N5NDpositionvector3in1" />
+      <input name="in2" type="vector3" nodename="N4NDconstantvector3in2" />
+    </distance>
+    <position name="N5NDpositionvector3in1" type="vector3" nodedef="ND_position_vector3">
+      <input name="space" type="string" value="world" />
+    </position>
+    <constant name="N4NDconstantvector3in2" type="vector3" nodedef="ND_constant_vector3">
+      <input name="value" type="vector3" value="0, 2, 0" />
+    </constant>
+    <output name="diffuseColor_out" type="color3" nodename="N1NDconvertfloatcolor3emissiveColor" />
+    <output name="emissiveColor_out" type="color3" nodename="N1NDconvertfloatcolor3emissiveColor" />
+  </nodegraph>
+</materialx>

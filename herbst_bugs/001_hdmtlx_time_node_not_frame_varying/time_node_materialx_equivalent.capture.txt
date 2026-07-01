@@ -1,0 +1,2 @@
+Wrote frame to disk: time_node_materialx_equivalent.png
+UNSUPPORTED (log once): POSSIBLE ISSUE: unit 0 GLD_TEXTURE_INDEX_2D is unloadable and bound to sampler type (Float) - using zero texture because texture unloadable

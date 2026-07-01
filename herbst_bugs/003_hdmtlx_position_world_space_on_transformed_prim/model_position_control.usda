@@ -1,0 +1,75 @@
+#usda 1.0
+(
+    defaultPrim = "Root"
+    metersPerUnit = 1
+    upAxis = "Y"
+)
+
+def Xform "Root"
+{
+    def Sphere "Sphere" (
+        prepend apiSchemas = ["MaterialBindingAPI"]
+    )
+    {
+        rel material:binding = </Root/Looks/PositionMaterial>
+        double radius = 1
+        double3 xformOp:translate = (0, 2, 0)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Scope "Looks"
+    {
+        def Material "PositionMaterial" (
+            prepend apiSchemas = ["MaterialXConfigAPI"]
+        )
+        {
+            string config:mtlx:version = "1.39"
+            token outputs:mtlx:surface.connect = </Root/Looks/PositionMaterial/Surface.outputs:out>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+                color3f inputs:diffuseColor.connect = </Root/Looks/PositionMaterial/Color.outputs:out>
+                color3f inputs:emissiveColor.connect = </Root/Looks/PositionMaterial/Color.outputs:out>
+                token outputs:out
+            }
+
+            def Shader "Position"
+            {
+                uniform token info:id = "ND_position_vector3"
+                string inputs:space = "model"
+                float3 outputs:out
+            }
+
+            def Shader "Distance"
+            {
+                uniform token info:id = "ND_distance_vector3"
+                float3 inputs:in1.connect = </Root/Looks/PositionMaterial/Position.outputs:out>
+                float3 inputs:in2.connect = </Root/Looks/PositionMaterial/ReferencePoint.outputs:out>
+                float outputs:out
+            }
+
+            def Shader "ReferencePoint"
+            {
+                uniform token info:id = "ND_constant_vector3"
+                float3 inputs:value = (0, 2, 0)
+                float3 outputs:out
+            }
+
+            def Shader "Invert"
+            {
+                uniform token info:id = "ND_subtract_float"
+                float inputs:in1 = 1
+                float inputs:in2.connect = </Root/Looks/PositionMaterial/Distance.outputs:out>
+                float outputs:out
+            }
+
+            def Shader "Color"
+            {
+                uniform token info:id = "ND_convert_float_color3"
+                float inputs:in.connect = </Root/Looks/PositionMaterial/Invert.outputs:out>
+                color3f outputs:out
+            }
+        }
+    }
+}

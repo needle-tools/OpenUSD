@@ -1,0 +1,62 @@
+#usda 1.0
+(
+    defaultPrim = "Root"
+    startTimeCode = 0
+    endTimeCode = 600
+    timeCodesPerSecond = 60
+    framesPerSecond = 60
+    metersPerUnit = 1
+    upAxis = "Y"
+)
+
+def Xform "Root"
+{
+    def Sphere "Sphere" (
+        prepend apiSchemas = ["MaterialBindingAPI"]
+    )
+    {
+        rel material:binding = </Root/Looks/TimeMaterial>
+        double radius = 1
+    }
+
+    def Scope "Looks"
+    {
+        def Material "TimeMaterial" (
+            prepend apiSchemas = ["MaterialXConfigAPI"]
+        )
+        {
+            string config:mtlx:version = "1.39"
+            token outputs:mtlx:surface.connect = </Root/Looks/TimeMaterial/Surface.outputs:out>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+                color3f inputs:diffuseColor.connect = </Root/Looks/TimeMaterial/TimeColor.outputs:out>
+                color3f inputs:emissiveColor.connect = </Root/Looks/TimeMaterial/TimeColor.outputs:out>
+                float inputs:roughness = 0.5
+                token outputs:out
+            }
+
+            def Shader "Time"
+            {
+                uniform token info:id = "ND_time_float"
+                float outputs:out
+            }
+
+            def Shader "TimeScale"
+            {
+                uniform token info:id = "ND_multiply_float"
+                float inputs:in1.connect = </Root/Looks/TimeMaterial/Time.outputs:out>
+                float inputs:in2 = 0.1
+                float outputs:out
+            }
+
+            def Shader "TimeColor"
+            {
+                uniform token info:id = "ND_convert_float_color3"
+                float inputs:in.connect = </Root/Looks/TimeMaterial/TimeScale.outputs:out>
+                color3f outputs:out
+            }
+        }
+    }
+}

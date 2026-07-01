@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<materialx version="1.39" colorspace="lin_rec709">
+  <nodedef name="ND_local_tint" node="local_tint">
+    <input name="base" type="color3" default="0.15,0.45,1" />
+    <input name="gain" type="float" default="0.85" />
+    <output name="out" type="color3" />
+  </nodedef>
+  <nodegraph name="NG_local_tint" nodedef="ND_local_tint">
+    <multiply name="Tinted" type="color3">
+      <input name="in1" type="color3" interfacename="base" />
+      <input name="in2" type="float" interfacename="gain" />
+    </multiply>
+    <output name="out" type="color3" nodename="Tinted" />
+  </nodegraph>
+  <nodegraph name="NG_material">
+    <local_tint name="LocalTint" type="color3">
+      <input name="base" type="color3" value="0.15,0.45,1" />
+      <input name="gain" type="float" value="0.85" />
+    </local_tint>
+    <output name="out" type="color3" nodename="LocalTint" />
+  </nodegraph>
+  <UsdPreviewSurface name="Surface" type="surfaceshader">
+    <input name="diffuseColor" type="color3" nodegraph="NG_material" output="out" />
+    <input name="emissiveColor" type="color3" nodegraph="NG_material" output="out" />
+    <input name="roughness" type="float" value="0.5" />
+  </UsdPreviewSurface>
+  <surfacematerial name="LocalNodeMaterial" type="material">
+    <input name="surfaceshader" type="surfaceshader" nodename="Surface" />
+  </surfacematerial>
+</materialx>

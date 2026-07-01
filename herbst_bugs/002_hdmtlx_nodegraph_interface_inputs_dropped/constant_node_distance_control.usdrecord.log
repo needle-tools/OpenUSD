@@ -1,0 +1,5 @@
+[pxrInternal_v0_26_5__pxrReserved__::HdMtlxCreateMtlxDocumentFromHdMaterialNetworkInterface] : MaterialX document: 'DistanceMaterial_Surface.mtlx'
+
+Camera: 
+Renderer plugin: HdStormRendererPlugin
+Recording time code: 0.000000

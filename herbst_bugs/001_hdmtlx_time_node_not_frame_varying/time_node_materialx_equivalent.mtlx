@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<materialx version="1.39" colorspace="lin_rec709">
+  <time name="Time" type="float" />
+  <multiply name="TimeScale" type="float">
+    <input name="in1" type="float" nodename="Time" />
+    <input name="in2" type="float" value="0.1" />
+  </multiply>
+  <convert name="TimeColor" type="color3">
+    <input name="in" type="float" nodename="TimeScale" />
+  </convert>
+  <UsdPreviewSurface name="Surface" type="surfaceshader">
+    <input name="diffuseColor" type="color3" nodename="TimeColor" />
+    <input name="emissiveColor" type="color3" nodename="TimeColor" />
+    <input name="roughness" type="float" value="0.5" />
+  </UsdPreviewSurface>
+  <surfacematerial name="TimeMaterial" type="material">
+    <input name="surfaceshader" type="surfaceshader" nodename="Surface" />
+  </surfacematerial>
+</materialx>
