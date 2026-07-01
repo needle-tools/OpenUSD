@@ -1148,6 +1148,83 @@ private:
         return value;
     }
 
+    template <class ArrayT>
+    bool _ExpandIndexedFaceVaryingPrimvar(
+        ArrayT const &values,
+        VtIntArray const &indices,
+        ArrayT *expandedValues) const
+    {
+        const size_t numFaceVaryings =
+            _topology.GetFaceVertexIndices().size();
+        if (indices.size() < numFaceVaryings) {
+            TF_WARN("Indexed face-varying primvar for <%s> has only %zu "
+                "indices, but the mesh topology expects %zu.",
+                GetId().GetText(), indices.size(), numFaceVaryings);
+            return false;
+        }
+
+        expandedValues->clear();
+        expandedValues->reserve(numFaceVaryings);
+        for (size_t i = 0; i < numFaceVaryings; ++i) {
+            const int valueIndex = indices[i];
+            if (valueIndex < 0 ||
+                static_cast<size_t>(valueIndex) >= values.size()) {
+                TF_WARN("Indexed face-varying primvar for <%s> references "
+                    "value %d, but the primvar only has %zu values.",
+                    GetId().GetText(), valueIndex, values.size());
+                return false;
+            }
+            expandedValues->push_back(values[valueIndex]);
+        }
+        return true;
+    }
+
+    VtValue _GetExpandedIndexedFaceVaryingPrimvarValue(
+        const VtValue &value,
+        VtIntArray const &fvarIndices) const
+    {
+        if (value.CanCast<VtVec2fArray>()) {
+            VtVec2fArray expandedData;
+            if (_ExpandIndexedFaceVaryingPrimvar(
+                    value.Get<VtVec2fArray>(),
+                    fvarIndices,
+                    &expandedData)) {
+                return VtValue(expandedData);
+            }
+        } else if (value.CanCast<VtVec3fArray>()) {
+            VtVec3fArray expandedData;
+            if (_ExpandIndexedFaceVaryingPrimvar(
+                    value.Get<VtVec3fArray>(),
+                    fvarIndices,
+                    &expandedData)) {
+                return VtValue(expandedData);
+            }
+        } else if (value.CanCast<VtVec4fArray>()) {
+            VtVec4fArray expandedData;
+            if (_ExpandIndexedFaceVaryingPrimvar(
+                    value.Get<VtVec4fArray>(),
+                    fvarIndices,
+                    &expandedData)) {
+                return VtValue(expandedData);
+            }
+        }
+
+        return VtValue();
+    }
+
+    size_t _GetDisplayFaceVaryingCount() const
+    {
+        const VtIntArray &faceVertexCounts =
+            _GetDisplayTopology().GetFaceVertexCounts();
+        size_t count = 0;
+        for (int faceVertexCount : faceVertexCounts) {
+            if (faceVertexCount > 0) {
+                count += static_cast<size_t>(faceVertexCount);
+            }
+        }
+        return count;
+    }
+
     // Send primvar data to JS
     void _SendPrimvar(
         const VtValue &value,
@@ -1215,12 +1292,41 @@ private:
                                     }
                                 }
 
-                                VtValue refinedValue =
-                                    _GetRefinedPrimvarValue(
-                                        value, ip, &fvarIndices);
+                                VtValue faceVaryingValue;
+                                if (primvar.indexed && !_usingRefinedTopology) {
+                                    faceVaryingValue =
+                                        _GetExpandedIndexedFaceVaryingPrimvarValue(
+                                            value, fvarIndices);
+                                } else {
+                                    faceVaryingValue =
+                                        _GetRefinedPrimvarValue(
+                                            value, ip, &fvarIndices);
+                                }
+                                if (faceVaryingValue.IsEmpty()) {
+                                    TF_WARN("Could not prepare face-varying "
+                                        "primvar %s for <%s>.",
+                                        primvar.name.GetText(),
+                                        GetId().GetText());
+                                    continue;
+                                }
 
                                 HdVtBufferSource buffer(
-                                    primvar.name, refinedValue);
+                                    primvar.name, faceVaryingValue);
+
+                                const size_t numFaceVaryings =
+                                    _GetDisplayFaceVaryingCount();
+                                if (static_cast<size_t>(
+                                        buffer.GetNumElements()) <
+                                    numFaceVaryings) {
+                                    TF_WARN("Face-varying primvar %s for <%s> "
+                                        "has only %zu values, but the display "
+                                        "topology expects %zu.",
+                                        primvar.name.GetText(),
+                                        GetId().GetText(),
+                                        buffer.GetNumElements(),
+                                        numFaceVaryings);
+                                    continue;
+                                }
 
                                 VtValue triangulated;
                                 HdMeshComputationResult result =
@@ -1237,7 +1343,7 @@ private:
 
                                 _SendPrimvar(
                                     result == HdMeshComputationResult::Unchanged
-                                        ? refinedValue
+                                        ? faceVaryingValue
                                         : triangulated,
                                     primvar.name.GetString(),
                                     ip);
