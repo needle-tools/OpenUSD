@@ -89,6 +89,7 @@ public:
         , _delegate(nullptr)
         , _geometryPass()
         , _stage()
+        , _complexity(1.0f)
     {
         HdRprimCollection collection = HdRprimCollection(
                 HdTokens->geometry,
@@ -108,6 +109,7 @@ public:
         , _delegate(nullptr)
         , _geometryPass()
         , _stage()
+        , _complexity(1.0f)
     {
         HdRprimCollection collection = HdRprimCollection(
                 HdTokens->geometry,
@@ -165,10 +167,23 @@ public:
     }
 
     void SetRefineLevelFallback(int level) {
+        _complexity = _GetComplexityForRefineLevel(level);
         if (!_delegate) {
             return;
         }
         _delegate->SetRefineLevelFallback(level);
+    }
+
+    float GetComplexity() const {
+        return _complexity;
+    }
+
+    void SetComplexity(float complexity) {
+        _complexity = complexity;
+        if (!_delegate) {
+            return;
+        }
+        _delegate->SetRefineLevelFallback(_GetRefineLevel(complexity));
     }
 
     void getFile(std::string filename, emscripten::val callback) {
@@ -320,6 +335,43 @@ private:
     HdRenderPassSharedPtr _geometryPass;
     UsdStageRefPtr _stage;
     TfTokenVector _renderTags;
+    float _complexity;
+
+    static int _GetRefineLevel(float c) {
+        int refineLevel = 0;
+
+        // Match UsdImagingGLEngine's complexity-to-refine-level conversion.
+        c = std::min(c + 0.01f, 2.0f);
+        if (1.0f <= c && c < 1.1f) {
+            refineLevel = 0;
+        } else if (1.1f <= c && c < 1.2f) {
+            refineLevel = 1;
+        } else if (1.2f <= c && c < 1.3f) {
+            refineLevel = 2;
+        } else if (1.3f <= c && c < 1.4f) {
+            refineLevel = 3;
+        } else if (1.4f <= c && c < 1.5f) {
+            refineLevel = 4;
+        } else if (1.5f <= c && c < 1.6f) {
+            refineLevel = 5;
+        } else if (1.6f <= c && c < 1.7f) {
+            refineLevel = 6;
+        } else if (1.7f <= c && c < 1.8f) {
+            refineLevel = 7;
+        } else if (1.8f <= c && c <= 2.0f) {
+            refineLevel = 8;
+        } else {
+            TF_CODING_ERROR("Invalid complexity %f, expected range is [1.0,2.0]\n", c);
+        }
+        return refineLevel;
+    }
+
+    static float _GetComplexityForRefineLevel(int level) {
+        if (level <= 0) {
+            return 1.0f;
+        }
+        return std::min(1.0f + 0.1f * static_cast<float>(level), 1.8f);
+    }
 
     static TfToken _PurposeToRenderTag(TfToken const &purpose) {
         if (purpose == UsdGeomTokens->default_) {
@@ -342,7 +394,7 @@ private:
         _renderIndex = HdRenderIndex::New(&_renderDelegate, HdDriverVector());
         TF_VERIFY(_renderIndex != nullptr);
         _delegate = new UsdImagingDelegate(_renderIndex, delegateId);
-        _delegate->SetRefineLevelFallback(0);
+        _delegate->SetRefineLevelFallback(_GetRefineLevel(_complexity));
 
         _stage = usdStage;
         if (!_stage) {
