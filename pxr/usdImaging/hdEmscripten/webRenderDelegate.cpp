@@ -1301,7 +1301,31 @@ private:
         const VtValue &value,
         VtIntArray const &fvarIndices) const
     {
-        if (value.CanCast<VtVec2fArray>()) {
+        if (value.CanCast<VtFloatArray>()) {
+            VtFloatArray expandedData;
+            if (_ExpandIndexedFaceVaryingPrimvar(
+                    value.Get<VtFloatArray>(),
+                    fvarIndices,
+                    &expandedData)) {
+                return VtValue(expandedData);
+            }
+        } else if (value.CanCast<VtIntArray>()) {
+            VtIntArray expandedData;
+            if (_ExpandIndexedFaceVaryingPrimvar(
+                    value.Get<VtIntArray>(),
+                    fvarIndices,
+                    &expandedData)) {
+                return VtValue(expandedData);
+            }
+        } else if (value.CanCast<VtBoolArray>()) {
+            VtBoolArray expandedData;
+            if (_ExpandIndexedFaceVaryingPrimvar(
+                    value.Get<VtBoolArray>(),
+                    fvarIndices,
+                    &expandedData)) {
+                return VtValue(expandedData);
+            }
+        } else if (value.CanCast<VtVec2fArray>()) {
             VtVec2fArray expandedData;
             if (_ExpandIndexedFaceVaryingPrimvar(
                     value.Get<VtVec2fArray>(),
@@ -1324,6 +1348,85 @@ private:
                     fvarIndices,
                     &expandedData)) {
                 return VtValue(expandedData);
+            }
+        }
+
+        return VtValue();
+    }
+
+    template <class ArrayT>
+    bool _TriangulateUniformPrimvar(
+        ArrayT const &values,
+        ArrayT *triangulatedValues) const
+    {
+        if (_trianglePrimitiveParams.empty()) {
+            return false;
+        }
+
+        triangulatedValues->clear();
+        triangulatedValues->reserve(3 * _trianglePrimitiveParams.size());
+        for (int primitiveParam : _trianglePrimitiveParams) {
+            const int faceIndex =
+                HdMeshUtil::DecodeFaceIndexFromCoarseFaceParam(
+                    primitiveParam);
+            if (faceIndex < 0 ||
+                static_cast<size_t>(faceIndex) >= values.size()) {
+                TF_WARN("Uniform primvar for <%s> references face %d, "
+                    "but the primvar only has %zu values.",
+                    GetId().GetText(), faceIndex, values.size());
+                return false;
+            }
+
+            for (int i = 0; i < 3; ++i) {
+                triangulatedValues->push_back(values[faceIndex]);
+            }
+        }
+        return true;
+    }
+
+    VtValue _GetTriangulatedUniformPrimvarValue(const VtValue &value) const
+    {
+        if (value.CanCast<VtFloatArray>()) {
+            VtFloatArray triangulatedData;
+            if (_TriangulateUniformPrimvar(
+                    value.Get<VtFloatArray>(),
+                    &triangulatedData)) {
+                return VtValue(triangulatedData);
+            }
+        } else if (value.CanCast<VtIntArray>()) {
+            VtIntArray triangulatedData;
+            if (_TriangulateUniformPrimvar(
+                    value.Get<VtIntArray>(),
+                    &triangulatedData)) {
+                return VtValue(triangulatedData);
+            }
+        } else if (value.CanCast<VtBoolArray>()) {
+            VtBoolArray triangulatedData;
+            if (_TriangulateUniformPrimvar(
+                    value.Get<VtBoolArray>(),
+                    &triangulatedData)) {
+                return VtValue(triangulatedData);
+            }
+        } else if (value.CanCast<VtVec2fArray>()) {
+            VtVec2fArray triangulatedData;
+            if (_TriangulateUniformPrimvar(
+                    value.Get<VtVec2fArray>(),
+                    &triangulatedData)) {
+                return VtValue(triangulatedData);
+            }
+        } else if (value.CanCast<VtVec3fArray>()) {
+            VtVec3fArray triangulatedData;
+            if (_TriangulateUniformPrimvar(
+                    value.Get<VtVec3fArray>(),
+                    &triangulatedData)) {
+                return VtValue(triangulatedData);
+            }
+        } else if (value.CanCast<VtVec4fArray>()) {
+            VtVec4fArray triangulatedData;
+            if (_TriangulateUniformPrimvar(
+                    value.Get<VtVec4fArray>(),
+                    &triangulatedData)) {
+                return VtValue(triangulatedData);
             }
         }
 
@@ -1353,6 +1456,28 @@ private:
         const std::string &ip = InterpolationStrings.at(interpolation);
         VtValue refinedValue =
             _GetRefinedPrimvarValue(value, interpolation, fvarIndices);
+        if (refinedValue.CanCast<VtFloatArray>()) {
+            VtFloatArray primvarData = refinedValue.Get<VtFloatArray>();
+            runInMainThread([&]() {
+                _rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 1, ip);
+            });
+        }
+        if (refinedValue.CanCast<VtIntArray>()) {
+            VtIntArray primvarData = refinedValue.Get<VtIntArray>();
+            runInMainThread([&]() {
+                _rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(primvarData.size(), reinterpret_cast<int32_t*>(primvarData.data()))), 1, ip);
+            });
+        }
+        if (refinedValue.CanCast<VtBoolArray>()) {
+            VtBoolArray primvarData = refinedValue.Get<VtBoolArray>();
+            VtIntArray intData(primvarData.size());
+            for (size_t i = 0; i < primvarData.size(); ++i) {
+                intData[i] = primvarData[i] ? 1 : 0;
+            }
+            runInMainThread([&]() {
+                _rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(intData.size(), reinterpret_cast<int32_t*>(intData.data()))), 1, ip);
+            });
+        }
         if (refinedValue.CanCast<VtVec2fArray>()) {
             VtVec2fArray primvarData = refinedValue.Get<VtVec2fArray>();
             runInMainThread([&]() {
@@ -1491,6 +1616,22 @@ private:
                         case HdInterpolationVarying:
                         case HdInterpolationVertex: {
                             _SendPrimvar(value, primvar.name.GetString(), ip);
+                            break;
+                        }
+                        case HdInterpolationUniform: {
+                            VtValue uniformValue =
+                                _GetTriangulatedUniformPrimvarValue(value);
+                            if (uniformValue.IsEmpty()) {
+                                TF_WARN("Could not triangulate uniform "
+                                    "primvar %s for <%s>.",
+                                    primvar.name.GetText(),
+                                    GetId().GetText());
+                                continue;
+                            }
+                            _SendPrimvar(
+                                uniformValue,
+                                primvar.name.GetString(),
+                                HdInterpolationFaceVarying);
                             break;
                         }
                         default:
