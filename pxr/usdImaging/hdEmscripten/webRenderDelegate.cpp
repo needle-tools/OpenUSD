@@ -141,8 +141,60 @@ void _runInMainThread(int funPointer) {
 // Only the main thread can communicate with the JS interpreter (other threads run in web workers).
 // All direct invocations of JS functions need to go through the main thread.
 void runInMainThread(std::function<void()> fun) {
+    if (emscripten_is_main_runtime_thread()) {
+        fun();
+        return;
+    }
     emscripten_sync_run_in_main_runtime_thread(EM_FUNC_SIG_VI, _runInMainThread, (void *) &fun);
 }
+
+class MainThreadJsVal {
+public:
+    MainThreadJsVal() = default;
+    ~MainThreadJsVal() {
+        Reset();
+    }
+
+    void AssignFromMainThread(emscripten::val value) {
+        Reset();
+        _handle = value.release_ownership();
+    }
+
+    void Reset() {
+        EM_VAL handle = _handle;
+        _handle = nullptr;
+        if (!handle) {
+            return;
+        }
+        runInMainThread([handle]() {
+            emscripten::val owned = emscripten::val::take_ownership(handle);
+        });
+    }
+
+    template <class Callback>
+    void With(Callback&& callback) {
+        EM_VAL handle = _handle;
+        if (!handle) {
+            return;
+        }
+        runInMainThread([handle, &callback]() {
+            emscripten::val borrowed = emscripten::val::take_ownership(handle);
+            try {
+                callback(borrowed);
+            } catch (...) {
+                borrowed.release_ownership();
+                throw;
+            }
+            borrowed.release_ownership();
+        });
+    }
+
+    MainThreadJsVal(MainThreadJsVal const&) = delete;
+    MainThreadJsVal& operator=(MainThreadJsVal const&) = delete;
+
+private:
+    EM_VAL _handle = nullptr;
+};
 
 bool _HasJsMethod(emscripten::val const& object, char const* name) {
     if (object.isUndefined() || object.isNull()) {
@@ -472,20 +524,21 @@ class Emscripten_Rprim final : public HdMesh {
 public:
     Emscripten_Rprim(TfToken const& typeId,
                  SdfPath const& id,
-                 emscripten::val renderDelegateInterface)
+                 emscripten::val *renderDelegateInterface)
      : HdMesh(id)
      , _typeId(typeId)
      , _renderDelegateInterface(renderDelegateInterface)
-     , _rPrim(val::undefined())
      , _meshUtil(NULL)
      , _adjacencyValid(false)
      , _normalsValid(false)
      , _reprFlatShadingEnabled(false)
      , _displayStyleFlatShadingEnabled(false)
     {
-      runInMainThread([&]() {
-        _rPrim = _renderDelegateInterface.call<val>(
-            "createRPrim", std::string(typeId.GetText()), id.GetAsString());
+      const std::string typeName = typeId.GetString();
+      const std::string path = id.GetAsString();
+      runInMainThread([this, typeName, path]() {
+        _rPrim.AssignFromMainThread(_renderDelegateInterface->call<val>(
+            "createRPrim", typeName, path));
       });
     }
 
@@ -551,8 +604,8 @@ public:
         _UpdateInstancer(delegate, dirtyBits);
         TfToken const renderTag = GetRenderTag();
         const bool visible = IsVisible() && renderTag != HdRenderTagTokens->hidden;
-        runInMainThread([&]() {
-            _rPrim.call<void>("setVisibilityState",
+        _rPrim.With([&](val& rPrim) {
+            rPrim.call<void>("setVisibilityState",
                 visible,
                 renderTag.GetString());
         });
@@ -561,8 +614,8 @@ public:
             HdChangeTracker::IsCullStyleDirty(*dirtyBits, id)) {
             const bool doubleSided = IsDoubleSided(delegate);
             const std::string cullStyle = _CullStyleToString(GetCullStyle(delegate));
-            runInMainThread([&]() {
-                _rPrim.call<void>("setCullStyle", doubleSided, cullStyle);
+            _rPrim.With([&](val& rPrim) {
+                rPrim.call<void>("setCullStyle", doubleSided, cullStyle);
             });
         }
 
@@ -594,16 +647,16 @@ public:
                     }
 
                     if (sections.size() > 0 ) {
-                        runInMainThread([&]() {
+                        _rPrim.With([&](val& rPrim) {
                             emscripten::val jsSections = sectionsToJSArray(sections);
-                            _rPrim.call<void>("setGeomSubsetMaterial", jsSections);
+                            rPrim.call<void>("setGeomSubsetMaterial", jsSections);
                         });
                     }
                 }
             }
             else {
-                runInMainThread([&]() {
-                    _rPrim.call<void>("setMaterial", materialId.GetAsString());
+                _rPrim.With([&](val& rPrim) {
+                    rPrim.call<void>("setMaterial", materialId.GetAsString());
                 });
             }
         }
@@ -668,8 +721,8 @@ public:
             _computedNormals = Hd_SmoothNormals::ComputeSmoothNormals(
                 &_adjacency, displayPoints.size(), displayPoints.cdata());
             _normalsValid = true;
-            runInMainThread([&]() {
-                _rPrim.call<void>("updateNormals", val(typed_memory_view(3 * _computedNormals.size(), reinterpret_cast<float*>(_computedNormals.data()))));
+            _rPrim.With([&](val& rPrim) {
+                rPrim.call<void>("updateNormals", val(typed_memory_view(3 * _computedNormals.size(), reinterpret_cast<float*>(_computedNormals.data()))));
             });
         }
         else if (!_smoothNormals && !_normalsValid) {
@@ -679,8 +732,8 @@ public:
 
         if (HdChangeTracker::IsTransformDirty(*dirtyBits, id)) {
             _transform = GfMatrix4f(delegate->GetTransform(id));
-            runInMainThread([&]() {
-                _rPrim.call<void>("setTransform", val(typed_memory_view(16, reinterpret_cast<float*>(_transform.data()))));
+            _rPrim.With([&](val& rPrim) {
+                rPrim.call<void>("setTransform", val(typed_memory_view(16, reinterpret_cast<float*>(_transform.data()))));
             });
         }
 
@@ -706,8 +759,8 @@ public:
                 }
             }
 
-            runInMainThread([&]() {
-                _rPrim.call<void>(
+            _rPrim.With([&](val& rPrim) {
+                rPrim.call<void>(
                     "setInstanceTransforms",
                     val(typed_memory_view(
                         16 * transforms.size(),
@@ -778,8 +831,8 @@ private:
     };
 
     TfToken _typeId;
-    emscripten::val _renderDelegateInterface;
-    emscripten::val _rPrim;
+    emscripten::val *_renderDelegateInterface;
+    MainThreadJsVal _rPrim;
     HdMeshUtil *_meshUtil;
 
     VtVec3iArray _triangulatedIndices;
@@ -1062,8 +1115,8 @@ private:
             orderedNormals[3 * i + 2] = normal;
         }
 
-        runInMainThread([&]() {
-            _rPrim.call<void>(
+        _rPrim.With([&](val& rPrim) {
+            rPrim.call<void>(
                 "updateOrderedNormals",
                 val(typed_memory_view(
                     3 * orderedNormals.size(),
@@ -1198,17 +1251,17 @@ private:
                 &_triangulatedIndices, &_trianglePrimitiveParams);
         }
 
-        runInMainThread([&]() {
+        _rPrim.With([&](val& rPrim) {
             _HdEmscriptenScopedTimer publishTimer(
                 std::string("_UpdateDisplayGeometry publish JS ") +
                 GetId().GetString());
-            _rPrim.call<void>(
+            rPrim.call<void>(
                 "updatePoints",
                 val(typed_memory_view(
                     3 * displayPoints.size(),
                     reinterpret_cast<float*>(
                         const_cast<GfVec3f*>(displayPoints.cdata())))));
-            _rPrim.call<void>(
+            rPrim.call<void>(
                 "updateIndices",
                 val(typed_memory_view(
                     3 * _triangulatedIndices.size(),
@@ -1458,14 +1511,14 @@ private:
             _GetRefinedPrimvarValue(value, interpolation, fvarIndices);
         if (refinedValue.CanCast<VtFloatArray>()) {
             VtFloatArray primvarData = refinedValue.Get<VtFloatArray>();
-            runInMainThread([&]() {
-                _rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 1, ip);
+            _rPrim.With([&](val& rPrim) {
+                rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 1, ip);
             });
         }
         if (refinedValue.CanCast<VtIntArray>()) {
             VtIntArray primvarData = refinedValue.Get<VtIntArray>();
-            runInMainThread([&]() {
-                _rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(primvarData.size(), reinterpret_cast<int32_t*>(primvarData.data()))), 1, ip);
+            _rPrim.With([&](val& rPrim) {
+                rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(primvarData.size(), reinterpret_cast<int32_t*>(primvarData.data()))), 1, ip);
             });
         }
         if (refinedValue.CanCast<VtBoolArray>()) {
@@ -1474,26 +1527,26 @@ private:
             for (size_t i = 0; i < primvarData.size(); ++i) {
                 intData[i] = primvarData[i] ? 1 : 0;
             }
-            runInMainThread([&]() {
-                _rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(intData.size(), reinterpret_cast<int32_t*>(intData.data()))), 1, ip);
+            _rPrim.With([&](val& rPrim) {
+                rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(intData.size(), reinterpret_cast<int32_t*>(intData.data()))), 1, ip);
             });
         }
         if (refinedValue.CanCast<VtVec2fArray>()) {
             VtVec2fArray primvarData = refinedValue.Get<VtVec2fArray>();
-            runInMainThread([&]() {
-                _rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(2 * primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 2, ip);
+            _rPrim.With([&](val& rPrim) {
+                rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(2 * primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 2, ip);
             });
         }
         if (refinedValue.CanCast<VtVec3fArray>()) {
             VtVec3fArray primvarData = refinedValue.Get<VtVec3fArray>();
-            runInMainThread([&]() {
-                _rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(3 * primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 3, ip);
+            _rPrim.With([&](val& rPrim) {
+                rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(3 * primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 3, ip);
             });
         }
         if (refinedValue.CanCast<VtVec4fArray>()) {
             VtVec4fArray primvarData = refinedValue.Get<VtVec4fArray>();
-            runInMainThread([&]() {
-                _rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(4 * primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 4, ip);
+            _rPrim.With([&](val& rPrim) {
+                rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(4 * primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 4, ip);
             });
         }
     }
@@ -1651,14 +1704,14 @@ private:
 
 class Emscripten_Material final : public HdMaterial {
 public:
-    Emscripten_Material(SdfPath const& id, emscripten::val renderDelegateInterface) :
+    Emscripten_Material(SdfPath const& id, emscripten::val *renderDelegateInterface) :
       HdMaterial(id)
      , _renderDelegateInterface(renderDelegateInterface)
-     , _sPrim(val::undefined())
     {
-      runInMainThread([&]() {
-        _sPrim = _renderDelegateInterface.call<val>(
-            "createSPrim", std::string("material"), id.GetAsString());
+      const std::string path = id.GetAsString();
+      runInMainThread([this, path]() {
+        _sPrim.AssignFromMainThread(_renderDelegateInterface->call<val>(
+            "createSPrim", std::string("material"), path));
       });
     }
 
@@ -1691,15 +1744,15 @@ public:
       _HdEmscriptenScopedTimer waitTimer(
           std::string("Emscripten_Material::Sync wait main ") +
           GetId().GetString());
-      runInMainThread([&]() {
+      _sPrim.With([&](val& sPrim) {
         _HdEmscriptenScopedTimer mainTimer(
             std::string("Emscripten_Material::Sync main ") +
             GetId().GetString());
 
-        _sPrim.call<val>("beginMaterialSync");
+        sPrim.call<val>("beginMaterialSync");
 
 #if HD_EMSCRIPTEN_HAS_MATERIALX
-        _SendMaterialXDocument(hdNetworkMap);
+        _SendMaterialXDocument(hdNetworkMap, sPrim);
 #endif
 
         for (auto& [networkId, network]: hdNetworkMap.map) {
@@ -1727,7 +1780,7 @@ public:
                         }
                     }
                 }
-                _sPrim.call<val>("updateNode", networkId.GetString(), node.path.GetAsString(), parameters);
+                sPrim.call<val>("updateNode", networkId.GetString(), node.path.GetAsString(), parameters);
             }
 
             val relationships = val::array();
@@ -1741,7 +1794,7 @@ public:
                 relationships.set(i++, relationshipObj);
             }
 
-            _sPrim.call<val>("updateFinished", networkId.GetString(), relationships);
+            sPrim.call<val>("updateFinished", networkId.GetString(), relationships);
         }
       });
       *dirtyBits = HdMaterial::Clean;
@@ -1752,11 +1805,12 @@ public:
     }
 
 private:
-    emscripten::val _renderDelegateInterface;
-    emscripten::val _sPrim;
+    emscripten::val *_renderDelegateInterface;
+    MainThreadJsVal _sPrim;
 
 #if HD_EMSCRIPTEN_HAS_MATERIALX
-    void _SendMaterialXDocument(HdMaterialNetworkMap const& hdNetworkMap)
+    void _SendMaterialXDocument(HdMaterialNetworkMap const& hdNetworkMap,
+                                val& sPrim)
     {
         _HdEmscriptenScopedTimer timer(
             std::string("Emscripten_Material::_SendMaterialXDocument ") +
@@ -1804,7 +1858,7 @@ private:
                 document.set("terminalNodePath", terminal.second.upstreamNode.GetAsString());
                 document.set("terminalOutputName", terminal.second.upstreamOutputName.GetString());
                 document.set("xml", xml);
-                _sPrim.call<val>("updateMaterialXDocument", document);
+                sPrim.call<val>("updateMaterialXDocument", document);
             } catch (std::exception const& e) {
                 TF_WARN("Failed to serialize MaterialX document for <%s>: %s",
                     GetId().GetText(), e.what());
@@ -1822,15 +1876,15 @@ private:
 class Emscripten_Camera final : public HdCamera {
 public:
     Emscripten_Camera(SdfPath const& id,
-                      emscripten::val renderDelegateInterface)
+                      emscripten::val *renderDelegateInterface)
         : HdCamera(id)
         , _renderDelegateInterface(renderDelegateInterface)
-        , _sPrim(val::undefined())
     {
-        runInMainThread([&]() {
-            _sPrim = _renderDelegateInterface.call<val>(
+        const std::string path = id.GetAsString();
+        runInMainThread([this, path]() {
+            _sPrim.AssignFromMainThread(_renderDelegateInterface->call<val>(
                 "createSPrim", std::string(HdPrimTypeTokens->camera.GetText()),
-                id.GetAsString());
+                path));
         });
     }
 
@@ -1858,8 +1912,8 @@ public:
         const float near = clippingRange.GetMin();
         const float far = clippingRange.GetMax();
 
-        runInMainThread([&]() {
-            if (!_HasJsMethod(_sPrim, "updateCameraState")) {
+        _sPrim.With([&](val& sPrim) {
+            if (!_HasJsMethod(sPrim, "updateCameraState")) {
                 return;
             }
             val state = val::object();
@@ -1874,7 +1928,7 @@ public:
             state.set("focalLength", focalLength);
             state.set("near", near);
             state.set("far", far);
-            _sPrim.call<void>("updateCameraState", state);
+            sPrim.call<void>("updateCameraState", state);
         });
     }
 
@@ -1884,8 +1938,8 @@ public:
     }
 
 private:
-    emscripten::val _renderDelegateInterface;
-    emscripten::val _sPrim;
+    emscripten::val *_renderDelegateInterface;
+    MainThreadJsVal _sPrim;
 
     Emscripten_Camera() = delete;
     Emscripten_Camera(const Emscripten_Camera &) = delete;
@@ -1896,15 +1950,16 @@ class Emscripten_Light final : public HdLight {
 public:
     Emscripten_Light(TfToken const& typeId,
                      SdfPath const& id,
-                     emscripten::val renderDelegateInterface)
+                     emscripten::val *renderDelegateInterface)
         : HdLight(id)
         , _typeId(typeId)
         , _renderDelegateInterface(renderDelegateInterface)
-        , _sPrim(val::undefined())
     {
-        runInMainThread([&]() {
-            _sPrim = _renderDelegateInterface.call<val>(
-                "createSPrim", std::string(typeId.GetText()), id.GetAsString());
+        const std::string typeName = typeId.GetString();
+        const std::string path = id.GetAsString();
+        runInMainThread([this, typeName, path]() {
+            _sPrim.AssignFromMainThread(_renderDelegateInterface->call<val>(
+                "createSPrim", typeName, path));
         });
     }
 
@@ -1937,8 +1992,8 @@ public:
         const float angle =
             _GetFloatParam(sceneDelegate, id, HdLightTokens->angle, 0.53f);
 
-        runInMainThread([&]() {
-            if (!_HasJsMethod(_sPrim, "updateLightState")) {
+        _sPrim.With([&](val& sPrim) {
+            if (!_HasJsMethod(sPrim, "updateLightState")) {
                 return;
             }
             val state = val::object();
@@ -1953,7 +2008,7 @@ public:
             state.set("width", width);
             state.set("height", height);
             state.set("angle", angle);
-            _sPrim.call<void>("updateLightState", state);
+            sPrim.call<void>("updateLightState", state);
         });
 
         *dirtyBits = HdLight::Clean;
@@ -2000,8 +2055,8 @@ private:
     }
 
     TfToken _typeId;
-    emscripten::val _renderDelegateInterface;
-    emscripten::val _sPrim;
+    emscripten::val *_renderDelegateInterface;
+    MainThreadJsVal _sPrim;
 
     Emscripten_Light() = delete;
     Emscripten_Light(const Emscripten_Light &) = delete;
@@ -2113,16 +2168,18 @@ HdRprim *
 WebRenderDelegate::CreateRprim(TfToken const& typeId,
                                     SdfPath const& rprimId)
 {
-    return new Emscripten_Rprim(typeId, rprimId, _renderDelegateInterface);
+    return new Emscripten_Rprim(typeId, rprimId, &_renderDelegateInterface);
 }
 
 void
 WebRenderDelegate::DestroyRprim(HdRprim *rPrim)
 {
-    if (_HasJsMethod(_renderDelegateInterface, "destroyRPrim")) {
-        _renderDelegateInterface.call<void>(
-            "destroyRPrim", rPrim->GetId().GetAsString());
-    }
+    const std::string path = rPrim->GetId().GetAsString();
+    runInMainThread([this, path]() {
+        if (_HasJsMethod(_renderDelegateInterface, "destroyRPrim")) {
+            _renderDelegateInterface.call<void>("destroyRPrim", path);
+        }
+    });
     delete rPrim;
 }
 
@@ -2131,9 +2188,9 @@ WebRenderDelegate::CreateSprim(TfToken const& typeId,
     SdfPath const& sprimId)
 {
     if (typeId == HdPrimTypeTokens->camera) {
-        return new Emscripten_Camera(sprimId, _renderDelegateInterface);
+        return new Emscripten_Camera(sprimId, &_renderDelegateInterface);
     } else if (typeId == HdPrimTypeTokens->material) {
-        return new Emscripten_Material(sprimId, _renderDelegateInterface);
+        return new Emscripten_Material(sprimId, &_renderDelegateInterface);
     } else if (typeId == HdPrimTypeTokens->domeLight ||
                typeId == HdPrimTypeTokens->cylinderLight ||
                typeId == HdPrimTypeTokens->diskLight ||
@@ -2142,7 +2199,7 @@ WebRenderDelegate::CreateSprim(TfToken const& typeId,
                typeId == HdPrimTypeTokens->rectLight ||
                typeId == HdPrimTypeTokens->simpleLight ||
                typeId == HdPrimTypeTokens->sphereLight) {
-        return new Emscripten_Light(typeId, sprimId, _renderDelegateInterface);
+        return new Emscripten_Light(typeId, sprimId, &_renderDelegateInterface);
     } else {
         TF_CODING_ERROR("Unknown Sprim Type %s", typeId.GetText());
     }
@@ -2154,9 +2211,9 @@ HdSprim *
 WebRenderDelegate::CreateFallbackSprim(TfToken const& typeId)
 {
     if (typeId == HdPrimTypeTokens->camera) {
-        return new Emscripten_Camera(SdfPath::EmptyPath(), _renderDelegateInterface);
+        return new Emscripten_Camera(SdfPath::EmptyPath(), &_renderDelegateInterface);
     } else if (typeId == HdPrimTypeTokens->material) {
-        return new Emscripten_Material(SdfPath::EmptyPath(), _renderDelegateInterface);
+        return new Emscripten_Material(SdfPath::EmptyPath(), &_renderDelegateInterface);
     } else if (typeId == HdPrimTypeTokens->domeLight ||
                typeId == HdPrimTypeTokens->cylinderLight ||
                typeId == HdPrimTypeTokens->diskLight ||
@@ -2165,7 +2222,7 @@ WebRenderDelegate::CreateFallbackSprim(TfToken const& typeId)
                typeId == HdPrimTypeTokens->rectLight ||
                typeId == HdPrimTypeTokens->simpleLight ||
                typeId == HdPrimTypeTokens->sphereLight) {
-        return new Emscripten_Light(typeId, SdfPath::EmptyPath(), _renderDelegateInterface);
+        return new Emscripten_Light(typeId, SdfPath::EmptyPath(), &_renderDelegateInterface);
     } else {
         TF_CODING_ERROR("Unknown Sprim Type %s", typeId.GetText());
     }
@@ -2177,10 +2234,12 @@ WebRenderDelegate::CreateFallbackSprim(TfToken const& typeId)
 void
 WebRenderDelegate::DestroySprim(HdSprim *sPrim)
 {
-    if (_HasJsMethod(_renderDelegateInterface, "destroySPrim")) {
-        _renderDelegateInterface.call<void>(
-            "destroySPrim", sPrim->GetId().GetAsString());
-    }
+    const std::string path = sPrim->GetId().GetAsString();
+    runInMainThread([this, path]() {
+        if (_HasJsMethod(_renderDelegateInterface, "destroySPrim")) {
+            _renderDelegateInterface.call<void>("destroySPrim", path);
+        }
+    });
     delete sPrim;
 }
 
@@ -2210,7 +2269,7 @@ WebRenderDelegate::DestroyBprim(HdBprim *bPrim)
 void
 WebRenderDelegate::CommitResources(HdChangeTracker *tracker)
 {
-    runInMainThread([&]() {
+    runInMainThread([this]() {
         _renderDelegateInterface.call<void>("CommitResources");
     });
 }
