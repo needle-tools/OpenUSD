@@ -1421,10 +1421,6 @@ public:
                             if (parameterName == TfToken("file")) {
                                 parameters.set("resolvedPath", resolvedPath);
                             }
-                            if (!resolvedPath.empty()) {
-                                ArGetResolver().OpenAsset(
-                                    ArResolvedPath(resolvedPath));
-                            }
                         }
                     }
                     _sPrim.call<val>("updateNode", networkId.GetString(), node.path.GetAsString(), parameters);
