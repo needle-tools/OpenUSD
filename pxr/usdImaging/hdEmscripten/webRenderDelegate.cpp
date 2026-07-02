@@ -1249,133 +1249,137 @@ private:
             _GetRefinedPrimvarValue(value, interpolation, fvarIndices);
         if (refinedValue.CanCast<VtVec2fArray>()) {
             VtVec2fArray primvarData = refinedValue.Get<VtVec2fArray>();
-            _rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(2 * primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 2, ip);
+            runInMainThread([&]() {
+                _rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(2 * primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 2, ip);
+            });
         }
         if (refinedValue.CanCast<VtVec3fArray>()) {
             VtVec3fArray primvarData = refinedValue.Get<VtVec3fArray>();
-            _rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(3 * primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 3, ip);
+            runInMainThread([&]() {
+                _rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(3 * primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 3, ip);
+            });
         }
         if (refinedValue.CanCast<VtVec4fArray>()) {
             VtVec4fArray primvarData = refinedValue.Get<VtVec4fArray>();
-            _rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(4 * primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 4, ip);
+            runInMainThread([&]() {
+                _rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(4 * primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 4, ip);
+            });
         }
     }
 
     void _SyncPrimvars(HdSceneDelegate *delegate,
                        HdDirtyBits      dirtyBits)
     {
-        runInMainThread([&]() {
-            SdfPath const &id = GetId();
-            for (size_t interpolation = HdInterpolationConstant;
-                        interpolation < HdInterpolationCount;
-                        ++interpolation) {
-                HdInterpolation ip = static_cast<HdInterpolation>(interpolation);
-                HdPrimvarDescriptorVector primvars = GetPrimvarDescriptors(delegate, ip);
+        SdfPath const &id = GetId();
+        for (size_t interpolation = HdInterpolationConstant;
+                    interpolation < HdInterpolationCount;
+                    ++interpolation) {
+            HdInterpolation ip = static_cast<HdInterpolation>(interpolation);
+            HdPrimvarDescriptorVector primvars = GetPrimvarDescriptors(delegate, ip);
 
-                size_t numPrimVars = primvars.size();
-                for (size_t primVarNum = 0;
-                            primVarNum < numPrimVars;
-                        ++primVarNum) {
-                    HdPrimvarDescriptor const &primvar = primvars[primVarNum];
-                    if (HdChangeTracker::IsPrimvarDirty(dirtyBits,
-                                                        id,
-                                                        primvar.name)) {
-                        VtValue value = GetPrimvar(delegate, primvar.name);
+            size_t numPrimVars = primvars.size();
+            for (size_t primVarNum = 0;
+                        primVarNum < numPrimVars;
+                    ++primVarNum) {
+                HdPrimvarDescriptor const &primvar = primvars[primVarNum];
+                if (HdChangeTracker::IsPrimvarDirty(dirtyBits,
+                                                    id,
+                                                    primvar.name)) {
+                    VtValue value = GetPrimvar(delegate, primvar.name);
 
-                        switch(ip) {
-                            case HdInterpolationFaceVarying: {
-                                VtIntArray fvarIndices;
-                                if (primvar.indexed) {
-                                    value = GetIndexedPrimvar(
-                                        delegate, primvar.name, &fvarIndices);
-                                    if (fvarIndices.empty()) {
-                                        TF_WARN("Indexed face-varying primvar "
-                                            "%s on <%s> has no indices.",
-                                            primvar.name.GetText(),
-                                            GetId().GetText());
-                                        continue;
-                                    }
-                                } else {
-                                    const size_t numFaceVaryings =
-                                        _topology.GetFaceVertexIndices().size();
-                                    fvarIndices.resize(numFaceVaryings);
-                                    for (size_t i = 0; i < numFaceVaryings; ++i) {
-                                        fvarIndices[i] = static_cast<int>(i);
-                                    }
-                                }
-
-                                VtValue faceVaryingValue;
-                                if (primvar.indexed && !_usingRefinedTopology) {
-                                    faceVaryingValue =
-                                        _GetExpandedIndexedFaceVaryingPrimvarValue(
-                                            value, fvarIndices);
-                                } else {
-                                    faceVaryingValue =
-                                        _GetRefinedPrimvarValue(
-                                            value, ip, &fvarIndices);
-                                }
-                                if (faceVaryingValue.IsEmpty()) {
-                                    TF_WARN("Could not prepare face-varying "
-                                        "primvar %s for <%s>.",
+                    switch(ip) {
+                        case HdInterpolationFaceVarying: {
+                            VtIntArray fvarIndices;
+                            if (primvar.indexed) {
+                                value = GetIndexedPrimvar(
+                                    delegate, primvar.name, &fvarIndices);
+                                if (fvarIndices.empty()) {
+                                    TF_WARN("Indexed face-varying primvar "
+                                        "%s on <%s> has no indices.",
                                         primvar.name.GetText(),
                                         GetId().GetText());
                                     continue;
                                 }
-
-                                HdVtBufferSource buffer(
-                                    primvar.name, faceVaryingValue);
-
+                            } else {
                                 const size_t numFaceVaryings =
-                                    _GetDisplayFaceVaryingCount();
-                                if (static_cast<size_t>(
-                                        buffer.GetNumElements()) <
-                                    numFaceVaryings) {
-                                    TF_WARN("Face-varying primvar %s for <%s> "
-                                        "has only %zu values, but the display "
-                                        "topology expects %zu.",
-                                        primvar.name.GetText(),
-                                        GetId().GetText(),
-                                        buffer.GetNumElements(),
-                                        numFaceVaryings);
-                                    continue;
+                                    _topology.GetFaceVertexIndices().size();
+                                fvarIndices.resize(numFaceVaryings);
+                                for (size_t i = 0; i < numFaceVaryings; ++i) {
+                                    fvarIndices[i] = static_cast<int>(i);
                                 }
-
-                                VtValue triangulated;
-                                HdMeshComputationResult result =
-                                    _meshUtil->ComputeTriangulatedFaceVaryingPrimvar(
-                                        buffer.GetData(),
-                                        buffer.GetNumElements(),
-                                        buffer.GetTupleType().type,
-                                        &triangulated);
-                                if (result == HdMeshComputationResult::Error) {
-                                    TF_CODING_ERROR("[%s] Could not triangulate face-varying data.",
-                                        primvar.name.GetText());
-                                    continue;
-                                }
-
-                                _SendPrimvar(
-                                    result == HdMeshComputationResult::Unchanged
-                                        ? faceVaryingValue
-                                        : triangulated,
-                                    primvar.name.GetString(),
-                                    ip);
-                                break;
                             }
-                            case HdInterpolationConstant:
-                            case HdInterpolationVarying:
-                            case HdInterpolationVertex: {
-                                _SendPrimvar(value, primvar.name.GetString(), ip);
-                                break;
+
+                            VtValue faceVaryingValue;
+                            if (primvar.indexed && !_usingRefinedTopology) {
+                                faceVaryingValue =
+                                    _GetExpandedIndexedFaceVaryingPrimvarValue(
+                                        value, fvarIndices);
+                            } else {
+                                faceVaryingValue =
+                                    _GetRefinedPrimvarValue(
+                                        value, ip, &fvarIndices);
                             }
-                            default:
-                                TF_WARN("Unsupported interpolation type '%s' for primvar %s",
-                                    InterpolationStrings.at(ip).c_str(),
+                            if (faceVaryingValue.IsEmpty()) {
+                                TF_WARN("Could not prepare face-varying "
+                                    "primvar %s for <%s>.",
+                                    primvar.name.GetText(),
+                                    GetId().GetText());
+                                continue;
+                            }
+
+                            HdVtBufferSource buffer(
+                                primvar.name, faceVaryingValue);
+
+                            const size_t numFaceVaryings =
+                                _GetDisplayFaceVaryingCount();
+                            if (static_cast<size_t>(
+                                    buffer.GetNumElements()) <
+                                numFaceVaryings) {
+                                TF_WARN("Face-varying primvar %s for <%s> "
+                                    "has only %zu values, but the display "
+                                    "topology expects %zu.",
+                                    primvar.name.GetText(),
+                                    GetId().GetText(),
+                                    buffer.GetNumElements(),
+                                    numFaceVaryings);
+                                continue;
+                            }
+
+                            VtValue triangulated;
+                            HdMeshComputationResult result =
+                                _meshUtil->ComputeTriangulatedFaceVaryingPrimvar(
+                                    buffer.GetData(),
+                                    buffer.GetNumElements(),
+                                    buffer.GetTupleType().type,
+                                    &triangulated);
+                            if (result == HdMeshComputationResult::Error) {
+                                TF_CODING_ERROR("[%s] Could not triangulate face-varying data.",
                                     primvar.name.GetText());
+                                continue;
+                            }
+
+                            _SendPrimvar(
+                                result == HdMeshComputationResult::Unchanged
+                                    ? faceVaryingValue
+                                    : triangulated,
+                                primvar.name.GetString(),
+                                ip);
+                            break;
                         }
+                        case HdInterpolationConstant:
+                        case HdInterpolationVarying:
+                        case HdInterpolationVertex: {
+                            _SendPrimvar(value, primvar.name.GetString(), ip);
+                            break;
+                        }
+                        default:
+                            TF_WARN("Unsupported interpolation type '%s' for primvar %s",
+                                InterpolationStrings.at(ip).c_str(),
+                                primvar.name.GetText());
                     }
                 }
             }
-        });
+        }
     }
 
     Emscripten_Rprim()                                 = delete;
