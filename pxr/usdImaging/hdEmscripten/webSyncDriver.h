@@ -157,6 +157,20 @@ public:
               _renderTags);
     }
 
+    int GetRefineLevelFallback() const {
+        if (!_delegate) {
+            return 0;
+        }
+        return _delegate->GetRefineLevelFallback();
+    }
+
+    void SetRefineLevelFallback(int level) {
+        if (!_delegate) {
+            return;
+        }
+        _delegate->SetRefineLevelFallback(level);
+    }
+
     void getFile(std::string filename, emscripten::val callback) {
         if (!_stage) {
             callback(emscripten::val::undefined());
@@ -328,7 +342,7 @@ private:
         _renderIndex = HdRenderIndex::New(&_renderDelegate, HdDriverVector());
         TF_VERIFY(_renderIndex != nullptr);
         _delegate = new UsdImagingDelegate(_renderIndex, delegateId);
-        _delegate->SetRefineLevelFallback(2);
+        _delegate->SetRefineLevelFallback(0);
 
         _stage = usdStage;
         if (!_stage) {
