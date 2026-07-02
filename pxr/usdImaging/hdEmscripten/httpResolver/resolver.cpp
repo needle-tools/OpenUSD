@@ -308,10 +308,7 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
         // is there a way to make this always work?
         setBaseTempDir(tempDir.generic_string() + "/1/1/1/1/1/1/");
         auto filePath = baseTempDir + fullHttpRouteAsPath.filename().generic_string();
-        savedAssetFilePath = FetchAndSaveAsset(stringAssetPathCopy, filePath);
-        if (savedAssetFilePath.empty()) {
-            return ArResolvedPath();
-        }
+        savedAssetFilePath = filePath;
         resolvedRoutes[savedAssetFilePath.generic_string()] = stringAssetPathCopy;
     }
     else if (!baseUrl.empty()){
@@ -331,10 +328,7 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
             std::cout << "Relative Path before: " << relativePath << std::endl;
         }
 
-        savedAssetFilePath = FetchAndSaveAsset(route, systemPath);
-        if (savedAssetFilePath.empty()) {
-            return ArResolvedPath();
-        }
+        savedAssetFilePath = systemPath;
         resolvedRoutes[savedAssetFilePath.generic_string()] = route;
         if (verbose){
             std::cout << "Assumed to exist now, trying from baseUrl: " << systemPath << std::endl;
@@ -349,6 +343,24 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
     }
 
     return ArResolvedPath(savedAssetFilePath);
+}
+
+std::string HttpResolver::GetUrlForResolvedPath(const std::string& resolvedPath) const {
+    const auto routeIt = resolvedRoutes.find(resolvedPath);
+    if (routeIt != resolvedRoutes.end()) {
+        return routeIt->second;
+    }
+
+    if (!baseUrl.empty() && !baseTempDir.empty()) {
+        std::filesystem::path systemPath = resolvedPath;
+        std::filesystem::path tempRoot = std::filesystem::temp_directory_path() / "1";
+        std::filesystem::path relativePath = systemPath.lexically_relative(baseTempDir);
+        if (isPathInside(systemPath, tempRoot) && !relativePath.empty()) {
+            return combineUrl(baseUrl, relativePath.generic_string());
+        }
+    }
+
+    return std::string();
 }
 
 std::shared_ptr<ArAsset> HttpResolver::_OpenAsset(const ArResolvedPath &resolvedPath) const {

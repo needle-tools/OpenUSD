@@ -55,6 +55,7 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
     .function("Draw", &pxr::HdWebSyncDriver::Draw, async())
     .function("Repopulate", &pxr::HdWebSyncDriver::Repopulate, async())
     .function("getFile", &pxr::HdWebSyncDriver::getFile)
+    .function("resolveAssetUrl", &pxr::HdWebSyncDriver::resolveAssetUrl)
     .function("HasStage", &pxr::HdWebSyncDriver::HasStage)
     .function("GetStage", optional_override([](pxr::HdWebSyncDriver& driver) {
       return get_pointer(driver.GetStage());

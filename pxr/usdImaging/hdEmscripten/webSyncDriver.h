@@ -17,6 +17,7 @@
 #include "pxr/usd/ar/resolver.h"
 #include "pxr/usd/ar/resolverContextBinder.h"
 #include "pxr/usd/sdf/layerUtils.h"
+#include "httpResolver/resolver.h"
 
 #include "webRenderDelegate.h"
 #include "pxr/imaging/hd/unitTestNullRenderPass.h"
@@ -200,6 +201,15 @@ public:
         size_t bufferSize = asset->GetSize();
         callback(emscripten::val(emscripten::typed_memory_view(bufferSize, buffer.get())));
     }
+
+    std::string resolveAssetUrl(std::string filename) {
+        auto* httpResolver = dynamic_cast<HttpResolver*>(&ArGetResolver());
+        if (!httpResolver) {
+            return std::string();
+        }
+        return httpResolver->GetUrlForResolvedPath(filename);
+    }
+
     void SetTime(double time) {
         if (!_delegate) {
             return;
