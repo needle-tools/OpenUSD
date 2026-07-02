@@ -42,14 +42,70 @@
 
 #include "pxr/base/arch/vsnprintf.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+#endif
+
+#include <chrono>
+#include <cstdlib>
 #include <iostream>
 #include <mutex>
+#include <string>
 #include <unordered_set>
 
 #include <tbb/concurrent_unordered_map.h>
 #include <tbb/concurrent_vector.h>
 
 PXR_NAMESPACE_OPEN_SCOPE
+
+#ifdef __EMSCRIPTEN__
+class _HdEmscriptenRenderIndexTimer {
+public:
+    explicit _HdEmscriptenRenderIndexTimer(std::string label)
+        : _label(std::move(label))
+        , _start(std::chrono::steady_clock::now())
+        , _enabled(_TimingLogsEnabled())
+    {
+        if (!_enabled) {
+            return;
+        }
+        const std::string message =
+            std::string("[hdEmscripten timing] begin ") + _label;
+        emscripten_log(EM_LOG_CONSOLE, "%s", message.c_str());
+    }
+
+    ~_HdEmscriptenRenderIndexTimer()
+    {
+        if (!_enabled) {
+            return;
+        }
+        const auto elapsed = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - _start).count();
+        const std::string message =
+            std::string("[hdEmscripten timing] end ") + _label + " " +
+            std::to_string(elapsed) + "ms";
+        emscripten_log(EM_LOG_CONSOLE, "%s", message.c_str());
+    }
+
+private:
+    static bool _TimingLogsEnabled()
+    {
+        const char *value = std::getenv("HDEMSCRIPTEN_TIMING_LOGS");
+        return value && value[0] && std::string(value) != "0";
+    }
+
+    std::string _label;
+    std::chrono::steady_clock::time_point _start;
+    bool _enabled;
+};
+#define HD_EMSCRIPTEN_CONCAT_INNER(a, b) a##b
+#define HD_EMSCRIPTEN_CONCAT(a, b) HD_EMSCRIPTEN_CONCAT_INNER(a, b)
+#define HD_EMSCRIPTEN_RENDER_INDEX_TIMER(label) \
+    _HdEmscriptenRenderIndexTimer \
+        HD_EMSCRIPTEN_CONCAT(timer_, __LINE__)(label)
+#else
+#define HD_EMSCRIPTEN_RENDER_INDEX_TIMER(label)
+#endif
 
 // \deprecated.
 //
@@ -1598,6 +1654,7 @@ void
 HdRenderIndex::SyncAll(HdTaskSharedPtrVector *tasks,
                        HdTaskContext *taskContext)
 {
+    HD_EMSCRIPTEN_RENDER_INDEX_TIMER("HdRenderIndex::SyncAll");
     HD_TRACE_FUNCTION();
 
     // Track SyncAll() depth.
@@ -1611,6 +1668,7 @@ HdRenderIndex::SyncAll(HdTaskSharedPtrVector *tasks,
     //
 
     if (_IsEnabledSceneIndexEmulation()) {
+        HD_EMSCRIPTEN_RENDER_INDEX_TIMER("HdRenderIndex::SyncAll renderDelegate Update");
         _renderDelegate->Update();
     }
 
@@ -1620,11 +1678,17 @@ HdRenderIndex::SyncAll(HdTaskSharedPtrVector *tasks,
 
     HdRenderParam *renderParam = _renderDelegate->GetRenderParam();
 
-    _bprimIndex.SyncPrims(_tracker, _renderDelegate->GetRenderParam(),
-                          _renderDelegate);
+    {
+        HD_EMSCRIPTEN_RENDER_INDEX_TIMER("HdRenderIndex::SyncAll bprim SyncPrims");
+        _bprimIndex.SyncPrims(_tracker, _renderDelegate->GetRenderParam(),
+                              _renderDelegate);
+    }
 
-    _sprimIndex.SyncPrims(_tracker, _renderDelegate->GetRenderParam(),
-                          _renderDelegate);
+    {
+        HD_EMSCRIPTEN_RENDER_INDEX_TIMER("HdRenderIndex::SyncAll sprim SyncPrims");
+        _sprimIndex.SyncPrims(_tracker, _renderDelegate->GetRenderParam(),
+                              _renderDelegate);
+    }
 
     ////////////////////////////////////////////////////////////////////////////
     //
@@ -1634,6 +1698,7 @@ HdRenderIndex::SyncAll(HdTaskSharedPtrVector *tasks,
     // processing the dirty rprims below.
     //
     {
+        HD_EMSCRIPTEN_RENDER_INDEX_TIMER("HdRenderIndex::SyncAll task sync");
         TRACE_FUNCTION_SCOPE("Task Sync");
 
         size_t numTasks = tasks->size();
@@ -1692,21 +1757,36 @@ HdRenderIndex::SyncAll(HdTaskSharedPtrVector *tasks,
     //
 
     // a. Gather render tags and reprSpecs.
-    TfTokenVector taskRenderTags = _GatherRenderTags(tasks);
+    TfTokenVector taskRenderTags;
+    {
+        HD_EMSCRIPTEN_RENDER_INDEX_TIMER("HdRenderIndex::SyncAll gather render tags");
+        taskRenderTags = _GatherRenderTags(tasks);
+    }
 
     // NOTE: This list of reprSpecs is used to sync every dirty rprim.
-    _CollectionReprSpecVector reprSpecs = _GatherReprSpecs(_collectionsToSync);
-    HdReprSelectorVector reprSelectors = _GetReprSelectors(reprSpecs);
+    _CollectionReprSpecVector reprSpecs;
+    HdReprSelectorVector reprSelectors;
+    {
+        HD_EMSCRIPTEN_RENDER_INDEX_TIMER("HdRenderIndex::SyncAll gather repr specs");
+        reprSpecs = _GatherReprSpecs(_collectionsToSync);
+        reprSelectors = _GetReprSelectors(reprSpecs);
+    }
 
     // b. Update dirty list params, if needed sync render tags,
     // and get dirty rprim ids
-    _rprimDirtyList.UpdateRenderTagsAndReprSelectors(taskRenderTags,
-                                                     reprSelectors);
+    {
+        HD_EMSCRIPTEN_RENDER_INDEX_TIMER("HdRenderIndex::SyncAll update dirty list selectors");
+        _rprimDirtyList.UpdateRenderTagsAndReprSelectors(taskRenderTags,
+                                                         reprSelectors);
+    }
 
     // NOTE: GetDirtyRprims relies on up-to-date render tags; if render tags
     // are dirty, this call will sync render tags before compiling the dirty
     // list. This is outside of the usual sync order, but is necessary for now.
-    SdfPathVector const& dirtyRprimIds = _rprimDirtyList.GetDirtyRprims();
+    SdfPathVector const& dirtyRprimIds = [&]() -> SdfPathVector const& {
+        HD_EMSCRIPTEN_RENDER_INDEX_TIMER("HdRenderIndex::SyncAll GetDirtyRprims");
+        return _rprimDirtyList.GetDirtyRprims();
+    }();
 
     // c. Bucket rprims by their scene delegate to help build the the list
     //    of rprims to sync for each scene delegate.
@@ -1714,6 +1794,7 @@ HdRenderIndex::SyncAll(HdTaskSharedPtrVector *tasks,
     bool resetVaryingState = false;
     bool pruneDirtyList = false;
     {
+        HD_EMSCRIPTEN_RENDER_INDEX_TIMER("HdRenderIndex::SyncAll build sync map");
         HF_TRACE_FUNCTION_SCOPE("Build Sync Map: Rprims");
         HdSceneDelegate* curDel = nullptr;
         _RprimSyncRequestVector* curVec = nullptr;
@@ -1804,6 +1885,7 @@ HdRenderIndex::SyncAll(HdTaskSharedPtrVector *tasks,
     // So that the entity marking the changes does not need to be aware of
     // render delegate specific data dependencies.
     {
+        HD_EMSCRIPTEN_RENDER_INDEX_TIMER("HdRenderIndex::SyncAll pre-sync rprims");
         HF_TRACE_FUNCTION_SCOPE("Pre-Sync Rprims");
 
         // Dispatch synchronization work to each delegate.
@@ -1827,6 +1909,7 @@ HdRenderIndex::SyncAll(HdTaskSharedPtrVector *tasks,
     // e. Scene delegate sync
     // Note: This is for the Rprim dirty bits alone.
     {
+        HD_EMSCRIPTEN_RENDER_INDEX_TIMER("HdRenderIndex::SyncAll scene delegate sync");
         HF_TRACE_FUNCTION_SCOPE("Scene Delegate Sync");
         // Dispatch synchronization work to each delegate.
         _SceneDelegateSyncWorker worker(&sdRprimSyncMap);
@@ -1838,7 +1921,9 @@ HdRenderIndex::SyncAll(HdTaskSharedPtrVector *tasks,
     }
 
     // f. Rprim Sync
-    WorkWithScopedParallelism([&]() {
+    {
+        HD_EMSCRIPTEN_RENDER_INDEX_TIMER("HdRenderIndex::SyncAll rprim sync");
+        WorkWithScopedParallelism([&]() {
         WorkDispatcher dispatcher;
         for (auto &entry : sdRprimSyncMap) {
             HdSceneDelegate* sceneDelegate = entry.first;
@@ -1870,9 +1955,11 @@ HdRenderIndex::SyncAll(HdTaskSharedPtrVector *tasks,
                 }
             }
         }
-    });
+        });
+    }
 
     {
+        HD_EMSCRIPTEN_RENDER_INDEX_TIMER("HdRenderIndex::SyncAll cleanup");
         HF_TRACE_FUNCTION_SCOPE("Clean Up");
         // Give scene delegates a chance to do any post-sync work,
         // such as garbage collection.

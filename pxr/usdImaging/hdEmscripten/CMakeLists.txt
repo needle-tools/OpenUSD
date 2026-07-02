@@ -13,6 +13,8 @@ set(HD_EMSCRIPTEN_CORE_BINDINGS_INC "${HD_EMSCRIPTEN_GENERATED_DIR}/emHdCoreBind
 set(HD_EMSCRIPTEN_CORE_BINDINGS_DTS "${HD_EMSCRIPTEN_GENERATED_DIR}/usd-core-bindings.d.ts")
 set(HD_EMSCRIPTEN_BUILD_INFO_JSON_FILE "${HD_EMSCRIPTEN_GENERATED_DIR}/openusd-build-info.json")
 set(HD_EMSCRIPTEN_BUILD_INFO_HEADER "${HD_EMSCRIPTEN_GENERATED_DIR}/openusdBuildInfo.h")
+set(HD_EMSCRIPTEN_LINK_OPTIMIZATION "-Oz" CACHE STRING
+    "Optimization flag used for the final emHdBindings link. Leave empty for faster local iteration builds.")
 file(MAKE_DIRECTORY "${HD_EMSCRIPTEN_GENERATED_DIR}")
 if(PYTHON_EXECUTABLE)
     set(HD_EMSCRIPTEN_PYTHON_EXECUTABLE "${PYTHON_EXECUTABLE}")
@@ -300,7 +302,7 @@ set_target_properties(${BINDINGS_NAME}
         LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/js/MemoryConfiguration.js;${CMAKE_CURRENT_SOURCE_DIR}/js/ViewerRuntimeExports.js;${CMAKE_CURRENT_SOURCE_DIR}/js/ViewerExternRuntimeExports.js"
 )
 target_compile_options(${BINDINGS_NAME} PRIVATE "SHELL: -lembind -pthread")
-target_link_options(${BINDINGS_NAME} PRIVATE "SHELL: -Oz -s EXPORT_NAME='getUsdModule' \
+target_link_options(${BINDINGS_NAME} PRIVATE "SHELL: ${HD_EMSCRIPTEN_LINK_OPTIMIZATION} -s EXPORT_NAME='getUsdModule' \
     -s MODULARIZE=1 -lembind -s PTHREAD_POOL_SIZE=10 -s ASYNCIFY \
     -s ASYNCIFY_STACK_SIZE=1048576 \
     -sIMPORTED_MEMORY=1 --pre-js ${CMAKE_CURRENT_SOURCE_DIR}/js/MemoryConfiguration.js  \

@@ -26,14 +26,61 @@
 #include "pxr/usd/usdGeom/metrics.h"
 #include "pxr/usd/usdGeom/tokens.h"
 
+#include <emscripten/emscripten.h>
+
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
 using HdRenderPassSharedPtr = std::shared_ptr<HdRenderPass>;
+
+class _HdEmscriptenSyncTimer {
+public:
+    explicit _HdEmscriptenSyncTimer(std::string label)
+        : _label(std::move(label))
+        , _start(std::chrono::steady_clock::now())
+        , _enabled(_TimingLogsEnabled())
+    {
+        if (!_enabled) {
+            return;
+        }
+        const std::string message =
+            std::string("[hdEmscripten timing] begin ") + _label;
+        emscripten_log(EM_LOG_CONSOLE, "%s", message.c_str());
+    }
+
+    ~_HdEmscriptenSyncTimer()
+    {
+        if (!_enabled) {
+            return;
+        }
+        const auto elapsed = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - _start).count();
+        const std::string message =
+            std::string("[hdEmscripten timing] end ") + _label + " " +
+            std::to_string(elapsed) + "ms";
+        emscripten_log(EM_LOG_CONSOLE, "%s", message.c_str());
+    }
+
+private:
+    static bool _TimingLogsEnabled()
+    {
+        const char *value = std::getenv("HDEMSCRIPTEN_TIMING_LOGS");
+        return value && value[0] && std::string(value) != "0";
+    }
+
+    std::string _label;
+    std::chrono::steady_clock::time_point _start;
+    bool _enabled;
+};
 
 /// A simple test task that just causes sync processing
 class WebSyncTask final : public HdTask
@@ -50,7 +97,11 @@ public:
     virtual void Sync(HdSceneDelegate* delegate,
                       HdTaskContext* ctx,
                       HdDirtyBits* dirtyBits) override {
-        _renderPass->Sync();
+        _HdEmscriptenSyncTimer timer("WebSyncTask::Sync");
+        {
+            _HdEmscriptenSyncTimer renderPassTimer("HdRenderPass::Sync");
+            _renderPass->Sync();
+        }
 
         *dirtyBits = HdChangeTracker::Clean;
     }
@@ -128,14 +179,107 @@ public:
     }
 
     void Draw() {
+        _HdEmscriptenSyncTimer timer("HdWebSyncDriver::Draw");
         if (!_stage || !_delegate || !_geometryPass) {
             return;
         }
-        _delegate->ApplyPendingUpdates();
+        {
+            _HdEmscriptenSyncTimer updatesTimer(
+                "UsdImagingDelegate::ApplyPendingUpdates");
+            _delegate->ApplyPendingUpdates();
+        }
         HdTaskSharedPtrVector tasks = {
             std::make_shared<WebSyncTask>(_geometryPass, _renderTags)
         };
-        _engine.Execute(&_delegate->GetRenderIndex(), &tasks);
+        {
+            _HdEmscriptenSyncTimer executeTimer("HdEngine::Execute");
+            _engine.Execute(&_delegate->GetRenderIndex(), &tasks);
+        }
+    }
+
+    bool StartDraw() {
+        if (!_stage || !_delegate || !_geometryPass) {
+            return false;
+        }
+
+        bool expected = false;
+        if (!_drawPending.compare_exchange_strong(expected, true)) {
+            return false;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(_drawErrorMutex);
+            _drawError.clear();
+        }
+
+        std::thread([this]() {
+            try {
+                Draw();
+            } catch (const std::exception& e) {
+                std::lock_guard<std::mutex> lock(_drawErrorMutex);
+                _drawError = e.what();
+            } catch (...) {
+                std::lock_guard<std::mutex> lock(_drawErrorMutex);
+                _drawError = "Unknown Hydra draw failure.";
+            }
+            _drawPending.store(false);
+        }).detach();
+
+        return true;
+    }
+
+    bool DrawAsync(emscripten::val resolve, emscripten::val reject) {
+        if (!_stage || !_delegate || !_geometryPass) {
+            resolve(emscripten::val::undefined());
+            return false;
+        }
+
+        bool expected = false;
+        if (!_drawPending.compare_exchange_strong(expected, true)) {
+            return false;
+        }
+
+        std::thread([this, resolve, reject]() mutable {
+            std::string error;
+            try {
+                if (const char *value =
+                        std::getenv("HDEMSCRIPTEN_TIMING_LOGS")) {
+                    if (value[0] && std::string(value) != "0") {
+                        emscripten_log(
+                            EM_LOG_CONSOLE,
+                            "%s",
+                            "[hdEmscripten timing] DrawAsync thread entered");
+                    }
+                }
+                Draw();
+            } catch (const std::exception& e) {
+                error = e.what();
+            } catch (...) {
+                error = "Unknown Hydra draw failure.";
+            }
+            _drawPending.store(false);
+
+            runInMainThread([resolve, reject, error]() mutable {
+                if (error.empty()) {
+                    resolve(emscripten::val::undefined());
+                } else {
+                    reject(emscripten::val(error));
+                }
+            });
+        }).detach();
+
+        return true;
+    }
+
+    bool IsDrawPending() const {
+        return _drawPending.load();
+    }
+
+    std::string ConsumeDrawError() {
+        std::lock_guard<std::mutex> lock(_drawErrorMutex);
+        std::string error = _drawError;
+        _drawError.clear();
+        return error;
     }
 
     void Repopulate() {
@@ -336,6 +480,9 @@ private:
     UsdStageRefPtr _stage;
     TfTokenVector _renderTags;
     float _complexity;
+    std::atomic<bool> _drawPending{false};
+    std::mutex _drawErrorMutex;
+    std::string _drawError;
 
     static int _GetRefineLevel(float c) {
         int refineLevel = 0;

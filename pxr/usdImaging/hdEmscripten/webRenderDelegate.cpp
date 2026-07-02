@@ -54,6 +54,8 @@
 #include <opensubdiv/far/primvarRefiner.h>
 #include <opensubdiv/far/topologyLevel.h>
 
+#include <emscripten/emscripten.h>
+
 #if __has_include("pxr/imaging/hdMtlx/hdMtlx.h") && __has_include(<MaterialXFormat/XmlIo.h>)
 #include "pxr/imaging/hdMtlx/hdMtlx.h"
 #include <MaterialXFormat/XmlIo.h>
@@ -61,6 +63,8 @@
 #endif
 
 #include <algorithm>
+#include <chrono>
+#include <cstdlib>
 #include <cmath>
 #include <iostream>
 #include <map>
@@ -87,6 +91,46 @@ const std::map<HdInterpolation, std::string> InterpolationStrings = {
     {HdInterpolationVertex, "vertex"},
     {HdInterpolationFaceVarying, "facevarying"},
     {HdInterpolationInstance, "instance"}
+};
+
+class _HdEmscriptenScopedTimer {
+public:
+    explicit _HdEmscriptenScopedTimer(std::string label)
+        : _label(std::move(label))
+        , _start(std::chrono::steady_clock::now())
+        , _enabled(_TimingLogsEnabled())
+    {
+        if (!_enabled) {
+            return;
+        }
+        const std::string message =
+            std::string("[hdEmscripten timing] begin ") + _label;
+        emscripten_log(EM_LOG_CONSOLE, "%s", message.c_str());
+    }
+
+    ~_HdEmscriptenScopedTimer()
+    {
+        if (!_enabled) {
+            return;
+        }
+        const auto elapsed = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - _start).count();
+        const std::string message =
+            std::string("[hdEmscripten timing] end ") + _label + " " +
+            std::to_string(elapsed) + "ms";
+        emscripten_log(EM_LOG_CONSOLE, "%s", message.c_str());
+    }
+
+private:
+    static bool _TimingLogsEnabled()
+    {
+        const char *value = std::getenv("HDEMSCRIPTEN_TIMING_LOGS");
+        return value && value[0] && std::string(value) != "0";
+    }
+
+    std::string _label;
+    std::chrono::steady_clock::time_point _start;
+    bool _enabled;
 };
 
 void _runInMainThread(int funPointer) {
@@ -439,7 +483,10 @@ public:
      , _reprFlatShadingEnabled(false)
      , _displayStyleFlatShadingEnabled(false)
     {
-      _rPrim = _renderDelegateInterface.call<val>("createRPrim", std::string(typeId.GetText()), id.GetAsString());
+      runInMainThread([&]() {
+        _rPrim = _renderDelegateInterface.call<val>(
+            "createRPrim", std::string(typeId.GetText()), id.GetAsString());
+      });
     }
 
     virtual ~Emscripten_Rprim() {
@@ -741,6 +788,7 @@ private:
 
     HdMeshTopology _topology;
     HdMeshTopology _displayTopology;
+    PxOsdTopologyRefinerSharedPtr _topologyRefiner;
     GfMatrix4f _transform;
     VtVec3fArray _points;
     VtVec3fArray _displayPoints;
@@ -777,6 +825,9 @@ private:
     PxOsdTopologyRefinerSharedPtr _CreateTopologyRefiner(
         std::vector<VtIntArray> const *fvarTopologies = nullptr) const
     {
+        _HdEmscriptenScopedTimer timer(
+            std::string("_CreateTopologyRefiner ") + GetId().GetString() +
+            (fvarTopologies ? " fvar" : " vertex"));
         const int refineLevel = std::min(_topology.GetRefineLevel(), 3);
         if (refineLevel <= 0 ||
             _topology.GetScheme() == PxOsdOpenSubdivTokens->none) {
@@ -804,11 +855,17 @@ private:
         ArrayT *refinedValues,
         HdInterpolation interpolation) const
     {
+        _HdEmscriptenScopedTimer timer(
+            std::string("_RefineVertexOrVaryingPrimvar ") +
+            GetId().GetString() + " " +
+            InterpolationStrings.at(interpolation));
         if (!_usingRefinedTopology || coarseValues.empty()) {
             return false;
         }
 
-        PxOsdTopologyRefinerSharedPtr refiner = _CreateTopologyRefiner();
+        PxOsdTopologyRefinerSharedPtr refiner = _topologyRefiner
+            ? _topologyRefiner
+            : _CreateTopologyRefiner();
         if (!refiner) {
             return false;
         }
@@ -826,18 +883,24 @@ private:
             values[i].value = coarseValues[i];
         }
 
-        OpenSubdiv::Far::PrimvarRefiner primvarRefiner(*refiner);
-        _OsdPrimvar<VecT> *src = values.data();
         const int refineLevel = std::min(_topology.GetRefineLevel(), 3);
-        for (int level = 1; level <= refineLevel; ++level) {
-            _OsdPrimvar<VecT> *dst =
-                src + refiner->GetLevel(level - 1).GetNumVertices();
-            if (interpolation == HdInterpolationVarying) {
-                primvarRefiner.InterpolateVarying(level, src, dst);
-            } else {
-                primvarRefiner.Interpolate(level, src, dst);
+        {
+            _HdEmscriptenScopedTimer interpolateTimer(
+                std::string("_RefineVertexOrVaryingPrimvar interpolate ") +
+                GetId().GetString() + " " +
+                InterpolationStrings.at(interpolation));
+            OpenSubdiv::Far::PrimvarRefiner primvarRefiner(*refiner);
+            _OsdPrimvar<VecT> *src = values.data();
+            for (int level = 1; level <= refineLevel; ++level) {
+                _OsdPrimvar<VecT> *dst =
+                    src + refiner->GetLevel(level - 1).GetNumVertices();
+                if (interpolation == HdInterpolationVarying) {
+                    primvarRefiner.InterpolateVarying(level, src, dst);
+                } else {
+                    primvarRefiner.Interpolate(level, src, dst);
+                }
+                src = dst;
             }
-            src = dst;
         }
 
         OpenSubdiv::Far::TopologyLevel const &lastLevel =
@@ -859,6 +922,9 @@ private:
         VtIntArray const &fvarIndices,
         ArrayT *refinedValues) const
     {
+        _HdEmscriptenScopedTimer timer(
+            std::string("_RefineFaceVaryingPrimvar ") +
+            GetId().GetString());
         if (!_usingRefinedTopology || coarseValues.empty()) {
             return false;
         }
@@ -919,14 +985,19 @@ private:
             values[i].value = coarseValues[i];
         }
 
-        OpenSubdiv::Far::PrimvarRefiner primvarRefiner(*refiner);
-        _OsdPrimvar<VecT> *src = values.data();
         const int refineLevel = std::min(_topology.GetRefineLevel(), 3);
-        for (int level = 1; level <= refineLevel; ++level) {
-            _OsdPrimvar<VecT> *dst =
-                src + refiner->GetLevel(level - 1).GetNumFVarValues(channel);
-            primvarRefiner.InterpolateFaceVarying(level, src, dst, channel);
-            src = dst;
+        {
+            _HdEmscriptenScopedTimer interpolateTimer(
+                std::string("_RefineFaceVaryingPrimvar interpolate ") +
+                GetId().GetString());
+            OpenSubdiv::Far::PrimvarRefiner primvarRefiner(*refiner);
+            _OsdPrimvar<VecT> *src = values.data();
+            for (int level = 1; level <= refineLevel; ++level) {
+                _OsdPrimvar<VecT> *dst =
+                    src + refiner->GetLevel(level - 1).GetNumFVarValues(channel);
+                primvarRefiner.InterpolateFaceVarying(level, src, dst, channel);
+                src = dst;
+            }
         }
 
         OpenSubdiv::Far::TopologyLevel const &lastLevel =
@@ -959,6 +1030,8 @@ private:
 
     void _UpdateFlatGeometricNormals()
     {
+        _HdEmscriptenScopedTimer timer(
+            std::string("_UpdateFlatGeometricNormals ") + GetId().GetString());
         const HdMeshTopology &displayTopology = _GetDisplayTopology();
         const VtVec3fArray &displayPoints = _GetDisplayPoints();
         VtVec3fArray orderedNormals(3 * _triangulatedIndices.size());
@@ -1000,8 +1073,11 @@ private:
 
     bool _BuildRefinedTopology()
     {
+        _HdEmscriptenScopedTimer timer(
+            std::string("_BuildRefinedTopology ") + GetId().GetString());
         _usingRefinedTopology = false;
         _displayPoints.clear();
+        _topologyRefiner.reset();
 
         const int refineLevel = std::min(_topology.GetRefineLevel(), 3);
         if (_points.empty() ||
@@ -1016,6 +1092,7 @@ private:
                 GetId().GetText());
             return false;
         }
+        _topologyRefiner = refiner;
 
         const int coarseVertexCount = refiner->GetLevel(0).GetNumVertices();
         if (static_cast<size_t>(coarseVertexCount) > _points.size()) {
@@ -1032,13 +1109,18 @@ private:
             vertices[i].position[2] = _points[i][2];
         }
 
-        OpenSubdiv::Far::PrimvarRefiner primvarRefiner(*refiner);
-        _OsdVertex *src = vertices.data();
-        for (int level = 1; level <= refineLevel; ++level) {
-            _OsdVertex *dst =
-                src + refiner->GetLevel(level - 1).GetNumVertices();
-            primvarRefiner.Interpolate(level, src, dst);
-            src = dst;
+        {
+            _HdEmscriptenScopedTimer interpolateTimer(
+                std::string("_BuildRefinedTopology interpolate points ") +
+                GetId().GetString());
+            OpenSubdiv::Far::PrimvarRefiner primvarRefiner(*refiner);
+            _OsdVertex *src = vertices.data();
+            for (int level = 1; level <= refineLevel; ++level) {
+                _OsdVertex *dst =
+                    src + refiner->GetLevel(level - 1).GetNumVertices();
+                primvarRefiner.Interpolate(level, src, dst);
+                src = dst;
+            }
         }
 
         OpenSubdiv::Far::TopologyLevel const &lastLevel =
@@ -1047,34 +1129,48 @@ private:
         const int firstRefinedVertex =
             refiner->GetNumVerticesTotal() - refinedVertexCount;
 
-        _displayPoints.resize(refinedVertexCount);
-        for (int i = 0; i < refinedVertexCount; ++i) {
-            _OsdVertex const &vertex = vertices[firstRefinedVertex + i];
-            _displayPoints[i] = GfVec3f(
-                vertex.position[0],
-                vertex.position[1],
-                vertex.position[2]);
+        {
+            _HdEmscriptenScopedTimer copyTimer(
+                std::string("_BuildRefinedTopology copy points ") +
+                GetId().GetString());
+            _displayPoints.resize(refinedVertexCount);
+            for (int i = 0; i < refinedVertexCount; ++i) {
+                _OsdVertex const &vertex = vertices[firstRefinedVertex + i];
+                _displayPoints[i] = GfVec3f(
+                    vertex.position[0],
+                    vertex.position[1],
+                    vertex.position[2]);
+            }
         }
 
         VtIntArray faceVertexCounts;
         VtIntArray faceVertexIndices;
-        const int faceCount = lastLevel.GetNumFaces();
-        for (int face = 0; face < faceCount; ++face) {
-            OpenSubdiv::Far::ConstIndexArray faceVertices =
-                lastLevel.GetFaceVertices(face);
-            if (faceVertices.size() < 3) {
-                continue;
-            }
+        {
+            _HdEmscriptenScopedTimer displayTopologyTimer(
+                std::string("_BuildRefinedTopology display topology ") +
+                GetId().GetString());
+            const int faceCount = lastLevel.GetNumFaces();
+            faceVertexCounts.reserve(faceCount);
+            faceVertexIndices.reserve(lastLevel.GetNumFaceVertices());
+            for (int face = 0; face < faceCount; ++face) {
+                OpenSubdiv::Far::ConstIndexArray faceVertices =
+                    lastLevel.GetFaceVertices(face);
+                if (faceVertices.size() < 3) {
+                    continue;
+                }
 
-            faceVertexCounts.push_back(static_cast<int>(faceVertices.size()));
-            for (int vertex = 0; vertex < faceVertices.size(); ++vertex) {
-                faceVertexIndices.push_back(faceVertices[vertex]);
+                faceVertexCounts.push_back(static_cast<int>(faceVertices.size()));
+                for (int vertex = 0; vertex < faceVertices.size(); ++vertex) {
+                    faceVertexIndices.push_back(faceVertices[vertex]);
+                }
             }
         }
 
+        // PxOsdRefinerFactory applies topology orientation while building the
+        // OpenSubdiv refiner, so the materialized refined topology is RH.
         _displayTopology = HdMeshTopology(
             PxOsdOpenSubdivTokens->none,
-            _topology.GetOrientation(),
+            HdTokens->rightHanded,
             faceVertexCounts,
             faceVertexIndices,
             0);
@@ -1084,6 +1180,8 @@ private:
 
     void _UpdateDisplayGeometry()
     {
+        _HdEmscriptenScopedTimer timer(
+            std::string("_UpdateDisplayGeometry ") + GetId().GetString());
         _BuildRefinedTopology();
         const HdMeshTopology &displayTopology = _GetDisplayTopology();
         const VtVec3fArray &displayPoints = _GetDisplayPoints();
@@ -1092,10 +1190,18 @@ private:
             delete _meshUtil;
         }
         _meshUtil = new HdMeshUtil(&displayTopology, GetId());
-        _meshUtil->ComputeTriangleIndices(
-            &_triangulatedIndices, &_trianglePrimitiveParams);
+        {
+            _HdEmscriptenScopedTimer triangleTimer(
+                std::string("_UpdateDisplayGeometry ComputeTriangleIndices ") +
+                GetId().GetString());
+            _meshUtil->ComputeTriangleIndices(
+                &_triangulatedIndices, &_trianglePrimitiveParams);
+        }
 
         runInMainThread([&]() {
+            _HdEmscriptenScopedTimer publishTimer(
+                std::string("_UpdateDisplayGeometry publish JS ") +
+                GetId().GetString());
             _rPrim.call<void>(
                 "updatePoints",
                 val(typed_memory_view(
@@ -1270,6 +1376,8 @@ private:
     void _SyncPrimvars(HdSceneDelegate *delegate,
                        HdDirtyBits      dirtyBits)
     {
+        _HdEmscriptenScopedTimer timer(
+            std::string("_SyncPrimvars ") + GetId().GetString());
         SdfPath const &id = GetId();
         for (size_t interpolation = HdInterpolationConstant;
                     interpolation < HdInterpolationCount;
@@ -1285,6 +1393,11 @@ private:
                 if (HdChangeTracker::IsPrimvarDirty(dirtyBits,
                                                     id,
                                                     primvar.name)) {
+                    _HdEmscriptenScopedTimer primvarTimer(
+                        std::string("_SyncPrimvars primvar ") +
+                        GetId().GetString() + " " +
+                        primvar.name.GetString() + " " +
+                        InterpolationStrings.at(ip));
                     VtValue value = GetPrimvar(delegate, primvar.name);
 
                     switch(ip) {
@@ -1346,12 +1459,20 @@ private:
                             }
 
                             VtValue triangulated;
-                            HdMeshComputationResult result =
-                                _meshUtil->ComputeTriangulatedFaceVaryingPrimvar(
-                                    buffer.GetData(),
-                                    buffer.GetNumElements(),
-                                    buffer.GetTupleType().type,
-                                    &triangulated);
+                            HdMeshComputationResult result;
+                            {
+                                _HdEmscriptenScopedTimer triangulateTimer(
+                                    std::string(
+                                        "_SyncPrimvars triangulate facevarying ") +
+                                    GetId().GetString() + " " +
+                                    primvar.name.GetString());
+                                result =
+                                    _meshUtil->ComputeTriangulatedFaceVaryingPrimvar(
+                                        buffer.GetData(),
+                                        buffer.GetNumElements(),
+                                        buffer.GetTupleType().type,
+                                        &triangulated);
+                            }
                             if (result == HdMeshComputationResult::Error) {
                                 TF_CODING_ERROR("[%s] Could not triangulate face-varying data.",
                                     primvar.name.GetText());
@@ -1394,7 +1515,10 @@ public:
      , _renderDelegateInterface(renderDelegateInterface)
      , _sPrim(val::undefined())
     {
-      _sPrim = _renderDelegateInterface.call<val>("createSPrim", std::string("material"), id.GetAsString());
+      runInMainThread([&]() {
+        _sPrim = _renderDelegateInterface.call<val>(
+            "createSPrim", std::string("material"), id.GetAsString());
+      });
     }
 
     virtual ~Emscripten_Material() = default;
@@ -1403,66 +1527,83 @@ public:
                       HdRenderParam   *renderParam,
                       HdDirtyBits     *dirtyBits) override
     {
+      _HdEmscriptenScopedTimer timer(
+          std::string("Emscripten_Material::Sync ") + GetId().GetString());
       if (*dirtyBits == HdMaterial::Clean) {
         return;
       }
+
+      VtValue vtMat;
+      {
+          _HdEmscriptenScopedTimer resourceTimer(
+              std::string("Emscripten_Material::GetMaterialResource ") +
+              GetId().GetString());
+          vtMat = sceneDelegate->GetMaterialResource(GetId());
+      }
+      if (!vtMat.IsHolding<HdMaterialNetworkMap>()) {
+        *dirtyBits = HdMaterial::Clean;
+        return;
+      }
+      HdMaterialNetworkMap const& hdNetworkMap =
+          vtMat.UncheckedGet<HdMaterialNetworkMap>();
+
+      _HdEmscriptenScopedTimer waitTimer(
+          std::string("Emscripten_Material::Sync wait main ") +
+          GetId().GetString());
       runInMainThread([&]() {
+        _HdEmscriptenScopedTimer mainTimer(
+            std::string("Emscripten_Material::Sync main ") +
+            GetId().GetString());
 
-        VtValue vtMat = sceneDelegate->GetMaterialResource(GetId());
-        if (vtMat.IsHolding<HdMaterialNetworkMap>()) {
-            HdMaterialNetworkMap const& hdNetworkMap =
-                vtMat.UncheckedGet<HdMaterialNetworkMap>();
-
-            _sPrim.call<val>("beginMaterialSync");
+        _sPrim.call<val>("beginMaterialSync");
 
 #if HD_EMSCRIPTEN_HAS_MATERIALX
-            _SendMaterialXDocument(hdNetworkMap);
+        _SendMaterialXDocument(hdNetworkMap);
 #endif
 
-            for (auto& [networkId, network]: hdNetworkMap.map) {
-                for (auto& node : network.nodes) {
-                    val parameters = val::object();
-                    parameters.set("identifier", node.identifier.GetString());
-                    parameters.set("path", node.path.GetAsString());
-                    for (auto &[parameterName, value] : node.parameters) {
-                        parameters.set(parameterName.GetString(), _VtValueToJsVal(value));
-                        if (value.IsHolding<SdfAssetPath>()) {
-                            SdfAssetPath assetPath = value.Get<SdfAssetPath>();
-                            const std::string parameter =
-                                parameterName.GetString();
-                            const std::string resolvedPath =
-                                assetPath.GetResolvedPath();
-                            const std::string resolvedUrl =
-                                _GetHttpResolvedUrl(resolvedPath);
-                            parameters.set(parameter + ":resolvedPath",
-                                resolvedPath);
-                            parameters.set(parameter + ":resolvedUrl",
-                                resolvedUrl);
-                            if (parameterName == TfToken("file")) {
-                                parameters.set("resolvedPath", resolvedPath);
-                                parameters.set("resolvedUrl", resolvedUrl);
-                            }
+        for (auto& [networkId, network]: hdNetworkMap.map) {
+            for (auto& node : network.nodes) {
+                val parameters = val::object();
+                parameters.set("identifier", node.identifier.GetString());
+                parameters.set("path", node.path.GetAsString());
+                for (auto &[parameterName, value] : node.parameters) {
+                    parameters.set(parameterName.GetString(), _VtValueToJsVal(value));
+                    if (value.IsHolding<SdfAssetPath>()) {
+                        SdfAssetPath assetPath = value.Get<SdfAssetPath>();
+                        const std::string parameter =
+                            parameterName.GetString();
+                        const std::string resolvedPath =
+                            assetPath.GetResolvedPath();
+                        const std::string resolvedUrl =
+                            _GetHttpResolvedUrl(resolvedPath);
+                        parameters.set(parameter + ":resolvedPath",
+                            resolvedPath);
+                        parameters.set(parameter + ":resolvedUrl",
+                            resolvedUrl);
+                        if (parameterName == TfToken("file")) {
+                            parameters.set("resolvedPath", resolvedPath);
+                            parameters.set("resolvedUrl", resolvedUrl);
                         }
                     }
-                    _sPrim.call<val>("updateNode", networkId.GetString(), node.path.GetAsString(), parameters);
                 }
-
-                val relationships = val::array();
-                int i = 0;
-                for (auto &relationship : network.relationships) {
-                    val relationshipObj = val::object();
-                    relationshipObj.set("inputId", relationship.inputId.GetAsString());
-                    relationshipObj.set("inputName", relationship.inputName.GetString());
-                    relationshipObj.set("outputId", relationship.outputId.GetAsString());
-                    relationshipObj.set("outputName", relationship.outputName.GetString());
-                    relationships.set(i++, relationshipObj);
-                }
-
-                _sPrim.call<val>("updateFinished", networkId.GetString(), relationships);
+                _sPrim.call<val>("updateNode", networkId.GetString(), node.path.GetAsString(), parameters);
             }
+
+            val relationships = val::array();
+            int i = 0;
+            for (auto &relationship : network.relationships) {
+                val relationshipObj = val::object();
+                relationshipObj.set("inputId", relationship.inputId.GetAsString());
+                relationshipObj.set("inputName", relationship.inputName.GetString());
+                relationshipObj.set("outputId", relationship.outputId.GetAsString());
+                relationshipObj.set("outputName", relationship.outputName.GetString());
+                relationships.set(i++, relationshipObj);
+            }
+
+            _sPrim.call<val>("updateFinished", networkId.GetString(), relationships);
         }
-        *dirtyBits = HdMaterial::Clean;
       });
+      *dirtyBits = HdMaterial::Clean;
     };
 
     virtual HdDirtyBits GetInitialDirtyBitsMask() const override {
@@ -1476,6 +1617,9 @@ private:
 #if HD_EMSCRIPTEN_HAS_MATERIALX
     void _SendMaterialXDocument(HdMaterialNetworkMap const& hdNetworkMap)
     {
+        _HdEmscriptenScopedTimer timer(
+            std::string("Emscripten_Material::_SendMaterialXDocument ") +
+            GetId().GetString());
         HdMaterialNetwork2 hdNetwork = HdConvertToHdMaterialNetwork2(hdNetworkMap);
         if (hdNetwork.terminals.empty() || hdNetwork.nodes.empty()) {
             return;
@@ -1542,9 +1686,11 @@ public:
         , _renderDelegateInterface(renderDelegateInterface)
         , _sPrim(val::undefined())
     {
-        _sPrim = _renderDelegateInterface.call<val>(
-            "createSPrim", std::string(HdPrimTypeTokens->camera.GetText()),
-            id.GetAsString());
+        runInMainThread([&]() {
+            _sPrim = _renderDelegateInterface.call<val>(
+                "createSPrim", std::string(HdPrimTypeTokens->camera.GetText()),
+                id.GetAsString());
+        });
     }
 
     virtual ~Emscripten_Camera() = default;
@@ -1553,31 +1699,40 @@ public:
                       HdRenderParam   *renderParam,
                       HdDirtyBits     *dirtyBits) override
     {
+        _HdEmscriptenScopedTimer timer(
+            std::string("Emscripten_Camera::Sync ") + GetId().GetString());
         HdCamera::Sync(sceneDelegate, renderParam, dirtyBits);
-
-        if (!_HasJsMethod(_sPrim, "updateCameraState")) {
-            return;
-        }
 
         GfMatrix4f transform(GetTransform());
         GfRange1f const& clippingRange = GetClippingRange();
-        val state = val::object();
-        state.set("typeId", HdPrimTypeTokens->camera.GetString());
-        state.set("id", GetId().GetAsString());
-        state.set("transform", _MatrixToJsVal(transform));
-        state.set("projection",
+        const std::string projection =
             GetProjection() == HdCamera::Orthographic
                 ? std::string("orthographic")
-                : std::string("perspective"));
-        state.set("horizontalAperture", GetHorizontalAperture());
-        state.set("verticalAperture", GetVerticalAperture());
-        state.set("horizontalApertureOffset", GetHorizontalApertureOffset());
-        state.set("verticalApertureOffset", GetVerticalApertureOffset());
-        state.set("focalLength", GetFocalLength());
-        state.set("near", clippingRange.GetMin());
-        state.set("far", clippingRange.GetMax());
+                : std::string("perspective");
+        const float horizontalAperture = GetHorizontalAperture();
+        const float verticalAperture = GetVerticalAperture();
+        const float horizontalApertureOffset = GetHorizontalApertureOffset();
+        const float verticalApertureOffset = GetVerticalApertureOffset();
+        const float focalLength = GetFocalLength();
+        const float near = clippingRange.GetMin();
+        const float far = clippingRange.GetMax();
 
         runInMainThread([&]() {
+            if (!_HasJsMethod(_sPrim, "updateCameraState")) {
+                return;
+            }
+            val state = val::object();
+            state.set("typeId", HdPrimTypeTokens->camera.GetString());
+            state.set("id", GetId().GetAsString());
+            state.set("transform", _MatrixToJsVal(transform));
+            state.set("projection", projection);
+            state.set("horizontalAperture", horizontalAperture);
+            state.set("verticalAperture", verticalAperture);
+            state.set("horizontalApertureOffset", horizontalApertureOffset);
+            state.set("verticalApertureOffset", verticalApertureOffset);
+            state.set("focalLength", focalLength);
+            state.set("near", near);
+            state.set("far", far);
             _sPrim.call<void>("updateCameraState", state);
         });
     }
@@ -1606,8 +1761,10 @@ public:
         , _renderDelegateInterface(renderDelegateInterface)
         , _sPrim(val::undefined())
     {
-        _sPrim = _renderDelegateInterface.call<val>(
-            "createSPrim", std::string(typeId.GetText()), id.GetAsString());
+        runInMainThread([&]() {
+            _sPrim = _renderDelegateInterface.call<val>(
+                "createSPrim", std::string(typeId.GetText()), id.GetAsString());
+        });
     }
 
     virtual ~Emscripten_Light() = default;
@@ -1616,35 +1773,47 @@ public:
                       HdRenderParam   *renderParam,
                       HdDirtyBits     *dirtyBits) override
     {
-        if (_HasJsMethod(_sPrim, "updateLightState")) {
-            SdfPath const& id = GetId();
-            GfMatrix4f transform(sceneDelegate->GetTransform(id));
-            const float exposure = _GetFloatParam(
-                sceneDelegate, id, HdLightTokens->exposure, 0.0f);
-            val state = val::object();
-            state.set("typeId", _typeId.GetString());
-            state.set("id", id.GetAsString());
-            state.set("visible", sceneDelegate->GetVisible(id));
-            state.set("transform", _MatrixToJsVal(transform));
-            state.set("color", _GfVecToJsVal(_GetVec3fParam(
-                sceneDelegate, id, HdLightTokens->color, GfVec3f(1.0f))));
-            state.set("intensity",
-                _GetFloatParam(sceneDelegate, id, HdLightTokens->intensity, 1.0f)
-                * std::pow(2.0f, exposure));
-            state.set("exposure", exposure);
-            state.set("radius",
-                _GetFloatParam(sceneDelegate, id, HdLightTokens->radius, 0.25f));
-            state.set("width",
-                _GetFloatParam(sceneDelegate, id, HdLightTokens->width, 1.0f));
-            state.set("height",
-                _GetFloatParam(sceneDelegate, id, HdLightTokens->height, 1.0f));
-            state.set("angle",
-                _GetFloatParam(sceneDelegate, id, HdLightTokens->angle, 0.53f));
+        _HdEmscriptenScopedTimer timer(
+            std::string("Emscripten_Light::Sync ") + GetId().GetString());
+        SdfPath const& id = GetId();
+        const std::string typeId = _typeId.GetString();
+        const std::string path = id.GetAsString();
+        const bool visible = sceneDelegate->GetVisible(id);
+        GfMatrix4f transform(sceneDelegate->GetTransform(id));
+        const GfVec3f color = _GetVec3fParam(
+            sceneDelegate, id, HdLightTokens->color, GfVec3f(1.0f));
+        const float exposure = _GetFloatParam(
+            sceneDelegate, id, HdLightTokens->exposure, 0.0f);
+        const float intensity =
+            _GetFloatParam(sceneDelegate, id, HdLightTokens->intensity, 1.0f)
+            * std::pow(2.0f, exposure);
+        const float radius =
+            _GetFloatParam(sceneDelegate, id, HdLightTokens->radius, 0.25f);
+        const float width =
+            _GetFloatParam(sceneDelegate, id, HdLightTokens->width, 1.0f);
+        const float height =
+            _GetFloatParam(sceneDelegate, id, HdLightTokens->height, 1.0f);
+        const float angle =
+            _GetFloatParam(sceneDelegate, id, HdLightTokens->angle, 0.53f);
 
-            runInMainThread([&]() {
-                _sPrim.call<void>("updateLightState", state);
-            });
-        }
+        runInMainThread([&]() {
+            if (!_HasJsMethod(_sPrim, "updateLightState")) {
+                return;
+            }
+            val state = val::object();
+            state.set("typeId", typeId);
+            state.set("id", path);
+            state.set("visible", visible);
+            state.set("transform", _MatrixToJsVal(transform));
+            state.set("color", _GfVecToJsVal(color));
+            state.set("intensity", intensity);
+            state.set("exposure", exposure);
+            state.set("radius", radius);
+            state.set("width", width);
+            state.set("height", height);
+            state.set("angle", angle);
+            _sPrim.call<void>("updateLightState", state);
+        });
 
         *dirtyBits = HdLight::Clean;
     }
@@ -1900,7 +2069,9 @@ WebRenderDelegate::DestroyBprim(HdBprim *bPrim)
 void
 WebRenderDelegate::CommitResources(HdChangeTracker *tracker)
 {
-    _renderDelegateInterface.call<void>("CommitResources");
+    runInMainThread([&]() {
+        _renderDelegateInterface.call<void>("CommitResources");
+    });
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

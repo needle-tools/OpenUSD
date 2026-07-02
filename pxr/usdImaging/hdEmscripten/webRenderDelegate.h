@@ -20,8 +20,11 @@
 
 #include <emscripten/bind.h>
 #include <emscripten/threading.h>
+#include <functional>
 
 PXR_NAMESPACE_OPEN_SCOPE
+
+void runInMainThread(std::function<void()> fun);
 
 class WebRenderDelegate final : public HdRenderDelegate
 {
