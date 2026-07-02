@@ -48,12 +48,24 @@ cmake --build "${ADOBE_PLUGIN_WASM_PREFIX}-build" \
   --parallel "${BUILD_PARALLELISM:-8}"
 
 mkdir -p \
+  "${ADOBE_PLUGIN_WASM_PREFIX}/include" \
   "${ADOBE_PLUGIN_WASM_PREFIX}/lib" \
   "${ADOBE_PLUGIN_WASM_PREFIX}/plugin/usd/usdGltf/resources"
 
 draco_lib="$(find "${ADOBE_PLUGIN_WASM_PREFIX}-build" -name 'libdraco.a' -print -quit)"
 if [[ -z "${draco_lib}" ]]; then
   echo "Draco was enabled, but libdraco.a was not produced." >&2
+  exit 1
+fi
+draco_include_root="$(find "${ADOBE_PLUGIN_WASM_PREFIX}-build/_deps" -path '*/draco-src/src/draco/compression/decode.h' -print -quit)"
+if [[ -z "${draco_include_root}" ]]; then
+  echo "Draco was enabled, but Draco headers were not found." >&2
+  exit 1
+fi
+draco_include_root="${draco_include_root%/draco/compression/decode.h}"
+draco_features_header="${ADOBE_PLUGIN_WASM_PREFIX}-build/draco/draco_features.h"
+if [[ ! -f "${draco_features_header}" ]]; then
+  echo "Draco was enabled, but generated draco_features.h was not found." >&2
   exit 1
 fi
 
@@ -64,6 +76,8 @@ cp "${ADOBE_PLUGIN_WASM_PREFIX}-build/utils/libfileformatUtils.a" \
 cp "${ADOBE_PLUGIN_WASM_PREFIX}-build/_deps/tinygltf-build/libtinygltf.a" \
   "${ADOBE_PLUGIN_WASM_PREFIX}/lib/libtinygltf.a"
 cp "${draco_lib}" "${ADOBE_PLUGIN_WASM_PREFIX}/lib/libdraco.a"
+cp -R "${draco_include_root}/draco" "${ADOBE_PLUGIN_WASM_PREFIX}/include/draco"
+cp "${draco_features_header}" "${ADOBE_PLUGIN_WASM_PREFIX}/include/draco/draco_features.h"
 cp "${ADOBE_PLUGIN_WASM_PREFIX}-build/gltf/src/plugInfo.json" \
   "${ADOBE_PLUGIN_WASM_PREFIX}/plugin/usd/usdGltf/resources/plugInfo.json"
 cp "${ADOBE_PLUGIN_REPO}/gltf/src/plugInfo.root.json" \

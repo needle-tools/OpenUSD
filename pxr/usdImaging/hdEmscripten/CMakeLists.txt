@@ -62,6 +62,7 @@ _hd_emscripten_git_dirty(HD_EMSCRIPTEN_OPENUSD_GIT_DIRTY "${PROJECT_SOURCE_DIR}"
 _hd_emscripten_json_bool(HD_EMSCRIPTEN_BUILD_USD_IMAGING PXR_BUILD_USD_IMAGING)
 _hd_emscripten_json_bool(HD_EMSCRIPTEN_BUILD_HD_EMSCRIPTEN PXR_BUILD_HD_EMSCRIPTEN)
 _hd_emscripten_json_bool(HD_EMSCRIPTEN_ENABLE_MATERIALX PXR_ENABLE_MATERIALX_SUPPORT)
+_hd_emscripten_json_bool(HD_EMSCRIPTEN_ENABLE_USD_DRACO PXR_BUILD_DRACO_PLUGIN)
 if(OPENSUBDIV_FOUND OR OPENSUBDIV_OSDCPU_LIBRARY OR OpenSubdiv_DIR)
     set(HD_EMSCRIPTEN_ENABLE_OPENSUBDIV "true")
 else()
@@ -171,6 +172,7 @@ add_resources(usdGeom)
 add_resources(usdSkel)
 add_resources(sdr)
 add_resources(httpResolver)
+add_resources(usdDraco)
 if(PXR_ENABLE_MATERIALX_SUPPORT)
     add_resources(usdMtlx)
     add_resources(hdMtlx)
@@ -247,6 +249,13 @@ if(PXR_ENABLE_MATERIALX_SUPPORT)
     )
 endif()
 
+set(HD_EMSCRIPTEN_NATIVE_PLUGIN_LIBS "")
+if(PXR_BUILD_DRACO_PLUGIN)
+    list(APPEND HD_EMSCRIPTEN_NATIVE_PLUGIN_LIBS
+        "$<LINK_LIBRARY:WHOLE_ARCHIVE,$<TARGET_FILE:usdDraco>>"
+    )
+endif()
+
 add_executable(${BINDINGS_NAME}
     emHdBindings.cpp
     "${HD_EMSCRIPTEN_CORE_BINDINGS_INC}"
@@ -268,6 +277,7 @@ _pxr_target_link_libraries(${BINDINGS_NAME}
     pxOsd
     httpResolver
     ${HD_EMSCRIPTEN_MATERIALX_LIBS}
+    ${HD_EMSCRIPTEN_NATIVE_PLUGIN_LIBS}
     ${HD_EMSCRIPTEN_GLTF_PLUGIN_LIBS}
     ${RESOURCE_PARAMETERS}
     ${PXR_MALLOC_LIBRARY}
@@ -279,6 +289,9 @@ if(EMSCRIPTEN)
             "SHELL:-Wl,--whole-archive $<TARGET_FILE:usdShaders> $<TARGET_FILE:sdrGlslfx> -Wl,--no-whole-archive"
     )
     add_dependencies(${BINDINGS_NAME} usdShaders sdrGlslfx)
+    if(PXR_BUILD_DRACO_PLUGIN)
+        add_dependencies(${BINDINGS_NAME} usdDraco)
+    endif()
 endif()
 
 set_target_properties(${BINDINGS_NAME}
