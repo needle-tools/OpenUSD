@@ -4,6 +4,7 @@
 #include <iostream>
 #include <filesystem>
 #include <fstream>
+#include <vector>
 
 // IMPORT LOCAL LIBRARIES
 #include "resolver.h"
@@ -223,6 +224,90 @@ bool isPathInside(const std::filesystem::path& path, const std::filesystem::path
     return !relative.empty() && !pathStartsWithParentTraversal(relative);
 }
 
+std::string getHttpDirectory(const std::string& url) {
+    const std::string normalizedUrl = correctURL(url);
+    const size_t schemeEnd = normalizedUrl.find("://");
+    const size_t searchStart = schemeEnd == std::string::npos
+        ? 0
+        : schemeEnd + 3;
+    const size_t slash = normalizedUrl.find_last_of('/');
+    if (slash == std::string::npos || slash < searchStart) {
+        return normalizedUrl + "/";
+    }
+    return normalizedUrl.substr(0, slash + 1);
+}
+
+std::string getHttpFilename(const std::string& url) {
+    const std::string normalizedUrl = correctURL(url);
+    const size_t slash = normalizedUrl.find_last_of('/');
+    if (slash == std::string::npos) {
+        return normalizedUrl;
+    }
+    return normalizedUrl.substr(slash + 1);
+}
+
+std::vector<std::string> splitPath(const std::string& path) {
+    std::vector<std::string> parts;
+    size_t start = 0;
+    while (start <= path.size()) {
+        const size_t slash = path.find('/', start);
+        const size_t end = slash == std::string::npos ? path.size() : slash;
+        if (end > start) {
+            parts.push_back(path.substr(start, end - start));
+        }
+        if (slash == std::string::npos) {
+            break;
+        }
+        start = slash + 1;
+    }
+    return parts;
+}
+
+std::string joinPathParts(const std::vector<std::string>& parts) {
+    std::string result;
+    for (const std::string& part : parts) {
+        result += "/";
+        result += part;
+    }
+    return result.empty() ? "/" : result;
+}
+
+std::string lexicalRelativePath(const std::string& targetPath, const std::string& baseDirectory) {
+    std::vector<std::string> targetParts = splitPath(targetPath);
+    std::vector<std::string> baseParts = splitPath(baseDirectory);
+    while (!baseParts.empty() && baseParts.back().empty()) {
+        baseParts.pop_back();
+    }
+
+    size_t common = 0;
+    while (common < targetParts.size()
+        && common < baseParts.size()
+        && targetParts[common] == baseParts[common]) {
+        ++common;
+    }
+
+    std::vector<std::string> relativeParts;
+    for (size_t i = common; i < baseParts.size(); ++i) {
+        relativeParts.push_back("..");
+    }
+    for (size_t i = common; i < targetParts.size(); ++i) {
+        relativeParts.push_back(targetParts[i]);
+    }
+
+    if (relativeParts.empty()) {
+        return std::string();
+    }
+
+    std::string result;
+    for (size_t i = 0; i < relativeParts.size(); ++i) {
+        if (i > 0) {
+            result += "/";
+        }
+        result += relativeParts[i];
+    }
+    return result;
+}
+
 std::string extractHttpUrl(const std::string& path) {
     if (isHttpUrl(path)) {
         return path;
@@ -240,29 +325,48 @@ std::string extractHttpUrl(const std::string& path) {
 }
 
 std::string combineUrl(const std::string& baseUrl, const std::string& relativePath) {
-    // Step 1: Strip off the scheme
-    auto schemeEnd = baseUrl.find(":/");
-    if (schemeEnd == std::string::npos) {
-        return baseUrl + relativePath;
+    if (isHttpUrl(relativePath)) {
+        return relativePath;
     }
-    std::string scheme = baseUrl.substr(0, schemeEnd + 3); // Include "://"
-    std::string basePath = baseUrl.substr(schemeEnd + 3);
+
+    const std::string normalizedBaseUrl = correctURL(baseUrl);
+
+    // Step 1: Strip off the scheme
+    auto schemeEnd = normalizedBaseUrl.find("://");
+    if (schemeEnd == std::string::npos) {
+        return normalizedBaseUrl + relativePath;
+    }
+    std::string scheme = normalizedBaseUrl.substr(0, schemeEnd + 3); // Include "://"
+    std::string basePath = normalizedBaseUrl.substr(schemeEnd + 3);
 
     // Extract the domain
     auto pathStart = basePath.find('/');
-    std::string domain = basePath.substr(0, pathStart);
-    std::string pathOnly = basePath.substr(pathStart); // Path without the domain
+    std::string domain = pathStart == std::string::npos
+        ? basePath
+        : basePath.substr(0, pathStart);
+    std::string pathOnly = pathStart == std::string::npos
+        ? "/"
+        : basePath.substr(pathStart); // Path without the domain
 
-    // Step 2: Use filesystem::path for manipulation
-    std::filesystem::path pathObj = pathOnly;
-    pathObj = pathObj.remove_filename(); // Ensure we're manipulating the directory part
-    pathObj /= relativePath; // Append the relative path
-    pathObj = pathObj.lexically_normal(); // Normalize the path (resolve "..", ".", etc.)
+    std::vector<std::string> parts = splitPath(pathOnly);
+    if (!pathOnly.empty() && pathOnly.back() != '/' && !parts.empty()) {
+        parts.pop_back();
+    }
 
-    // Step 3: Recombine
-    std::string combinedUrl = scheme + domain + pathObj.string();
+    for (const std::string& part : splitPath(relativePath)) {
+        if (part == ".") {
+            continue;
+        }
+        if (part == "..") {
+            if (!parts.empty()) {
+                parts.pop_back();
+            }
+            continue;
+        }
+        parts.push_back(part);
+    }
 
-    return combinedUrl;
+    return scheme + domain + joinPathParts(parts);
 }
 
 ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
@@ -291,10 +395,7 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
             stringAssetPathCopy.erase(pos_blob, blob.length());
         }
 
-        std::filesystem::path fullHttpRouteAsPath = stringAssetPathCopy;
-        std::filesystem::path rootHttpRouteAsPath = fullHttpRouteAsPath.parent_path();
-
-        auto finalBaseUrl = rootHttpRouteAsPath.generic_string() + "/";
+        auto finalBaseUrl = getHttpDirectory(stringAssetPathCopy);
         if (verbose){
             std::cout << "http PATH: " << stringAssetPathCopy << std::endl;
             std::cout << "finalBaseUrl: " << finalBaseUrl << std::endl;
@@ -307,7 +408,7 @@ ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
         // in the case of using /tmp/ then all relative paths greater than depth 1, will look the same. using 6 here is arbitrary,
         // is there a way to make this always work?
         setBaseTempDir(tempDir.generic_string() + "/1/1/1/1/1/1/");
-        auto filePath = baseTempDir + fullHttpRouteAsPath.filename().generic_string();
+        auto filePath = baseTempDir + getHttpFilename(stringAssetPathCopy);
         savedAssetFilePath = filePath;
         resolvedRoutes[savedAssetFilePath.generic_string()] = stringAssetPathCopy;
     }
@@ -352,11 +453,14 @@ std::string HttpResolver::GetUrlForResolvedPath(const std::string& resolvedPath)
     }
 
     if (!baseUrl.empty() && !baseTempDir.empty()) {
-        std::filesystem::path systemPath = resolvedPath;
-        std::filesystem::path tempRoot = std::filesystem::temp_directory_path() / "1";
-        std::filesystem::path relativePath = systemPath.lexically_relative(baseTempDir);
-        if (isPathInside(systemPath, tempRoot) && !relativePath.empty()) {
-            return combineUrl(baseUrl, relativePath.generic_string());
+        const std::string tempRoot =
+            (std::filesystem::temp_directory_path() / "1").generic_string();
+        if (resolvedPath.rfind(tempRoot + "/", 0) == 0) {
+            const std::string relativePath =
+                lexicalRelativePath(resolvedPath, baseTempDir);
+            if (!relativePath.empty()) {
+                return combineUrl(baseUrl, relativePath);
+            }
         }
     }
 

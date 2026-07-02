@@ -38,6 +38,8 @@
 #include "pxr/imaging/hd/meshUtil.h"
 #include "pxr/imaging/hd/materialNetwork2Interface.h"
 #include "pxr/imaging/hd/smoothNormals.h"
+#include "pxr/usd/ar/resolver.h"
+#include "httpResolver/resolver.h"
 #include "pxr/imaging/hd/vtBufferSource.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
 #include "pxr/imaging/pxOsd/refinerFactory.h"
@@ -65,6 +67,16 @@
 #include <vector>
 
 using namespace emscripten;
+
+static std::string
+_GetHttpResolvedUrl(const std::string& resolvedPath)
+{
+    auto* httpResolver = dynamic_cast<pxr::HttpResolver*>(&pxr::ArGetResolver());
+    if (!httpResolver) {
+        return std::string();
+    }
+    return httpResolver->GetUrlForResolvedPath(resolvedPath);
+}
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -1416,10 +1428,15 @@ public:
                                 parameterName.GetString();
                             const std::string resolvedPath =
                                 assetPath.GetResolvedPath();
+                            const std::string resolvedUrl =
+                                _GetHttpResolvedUrl(resolvedPath);
                             parameters.set(parameter + ":resolvedPath",
                                 resolvedPath);
+                            parameters.set(parameter + ":resolvedUrl",
+                                resolvedUrl);
                             if (parameterName == TfToken("file")) {
                                 parameters.set("resolvedPath", resolvedPath);
+                                parameters.set("resolvedUrl", resolvedUrl);
                             }
                         }
                     }

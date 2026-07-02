@@ -27,6 +27,7 @@
 #include "pxr/usd/usdGeom/tokens.h"
 
 #include <algorithm>
+#include <iostream>
 #include <memory>
 #include <string>
 
@@ -203,11 +204,21 @@ public:
     }
 
     std::string resolveAssetUrl(std::string filename) {
-        auto* httpResolver = dynamic_cast<HttpResolver*>(&ArGetResolver());
-        if (!httpResolver) {
+        try {
+            auto* httpResolver = dynamic_cast<HttpResolver*>(&ArGetResolver());
+            if (!httpResolver) {
+                return std::string();
+            }
+            return httpResolver->GetUrlForResolvedPath(filename);
+        } catch (const std::exception& e) {
+            std::cerr << "Failed to resolve asset URL for "
+                      << filename << ": " << e.what() << std::endl;
+            return std::string();
+        } catch (...) {
+            std::cerr << "Failed to resolve asset URL for "
+                      << filename << std::endl;
             return std::string();
         }
-        return httpResolver->GetUrlForResolvedPath(filename);
     }
 
     void SetTime(double time) {
