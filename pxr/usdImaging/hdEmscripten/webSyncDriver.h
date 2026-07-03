@@ -142,9 +142,7 @@ public:
         , _stage()
         , _complexity(1.0f)
     {
-        HdRprimCollection collection = HdRprimCollection(
-                HdTokens->geometry,
-                HdReprSelector(HdReprTokens->smoothHull));
+        HdRprimCollection collection = _GetCollectionForComplexity();
 
         _Init(UsdStage::Open(usdFilePath),
               collection,
@@ -162,9 +160,7 @@ public:
         , _stage()
         , _complexity(1.0f)
     {
-        HdRprimCollection collection = HdRprimCollection(
-                HdTokens->geometry,
-                HdReprSelector(HdReprTokens->smoothHull));
+        HdRprimCollection collection = _GetCollectionForComplexity();
 
         _Init(usdStage,
               collection,
@@ -293,9 +289,7 @@ public:
         _renderIndex = nullptr;
         _geometryPass.reset();
 
-        HdRprimCollection collection = HdRprimCollection(
-                HdTokens->geometry,
-                HdReprSelector(HdReprTokens->smoothHull));
+        HdRprimCollection collection = _GetCollectionForComplexity();
 
         _Init(_stage,
               collection,
@@ -316,6 +310,7 @@ public:
             return;
         }
         _delegate->SetRefineLevelFallback(level);
+        _UpdateCollectionForComplexity();
     }
 
     float GetComplexity() const {
@@ -328,6 +323,7 @@ public:
             return;
         }
         _delegate->SetRefineLevelFallback(_GetRefineLevel(complexity));
+        _UpdateCollectionForComplexity();
     }
 
     void getFile(std::string filename, emscripten::val callback) {
@@ -518,6 +514,29 @@ private:
             return 1.0f;
         }
         return std::min(1.0f + 0.1f * static_cast<float>(level), 1.8f);
+    }
+
+    static TfToken _GetReprTokenForRefineLevel(int refineLevel) {
+        return refineLevel > 0
+            ? HdReprTokens->refined
+            : HdReprTokens->smoothHull;
+    }
+
+    HdRprimCollection _GetCollectionForComplexity() const {
+        return HdRprimCollection(
+            HdTokens->geometry,
+            HdReprSelector(
+                _GetReprTokenForRefineLevel(_GetRefineLevel(_complexity))));
+    }
+
+    void _UpdateCollectionForComplexity() {
+        if (!_renderIndex || !_geometryPass) {
+            return;
+        }
+        HdRprimCollection collection = _GetCollectionForComplexity();
+        _renderIndex->GetChangeTracker().MarkCollectionDirty(
+            collection.GetName());
+        _geometryPass->SetRprimCollection(collection);
     }
 
     static TfToken _PurposeToRenderTag(TfToken const &purpose) {

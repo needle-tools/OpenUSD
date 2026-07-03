@@ -209,8 +209,8 @@ class HydraMesh {
   }
 
   updatePrimvar(name, data, dimension, interpolation) {
-    if (name === 'points' || name === 'normals') {
-      // Points and normals are set separately
+    if (name === 'points') {
+      // Points are set separately.
       return;
     }
 
@@ -222,6 +222,13 @@ class HydraMesh {
     }
 
     switch(name) {
+      case 'normals':
+        if (interpolation === 'facevarying') {
+          this.updateOrderedNormals(data);
+        } else {
+          this.updateNormals(data);
+        }
+        break;
       case 'displayColor':
         this.setDisplayColor(data, interpolation);
         break;

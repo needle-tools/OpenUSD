@@ -204,6 +204,16 @@ bool _HasJsMethod(emscripten::val const& object, char const* name) {
     return !method.isUndefined() && method.typeOf().as<std::string>() == "function";
 }
 
+std::map<SdfPath, bool> _limitSurfaceMaterialState;
+
+bool _HasLimitSurfaceEvaluation(VtDictionary const& metadata)
+{
+    auto const it = metadata.find("limitSurfaceEvaluation");
+    return it != metadata.end() &&
+        it->second.IsHolding<bool>() &&
+        it->second.Get<bool>();
+}
+
 std::string _CullStyleToString(HdCullStyle cullStyle)
 {
     switch (cullStyle) {
@@ -531,7 +541,9 @@ public:
      , _meshUtil(NULL)
      , _adjacencyValid(false)
      , _normalsValid(false)
+     , _hasAuthoredNormals(false)
      , _reprFlatShadingEnabled(false)
+     , _reprGeomStyle(HdMeshGeomStyleInvalid)
      , _displayStyleFlatShadingEnabled(false)
     {
       const std::string typeName = typeId.GetString();
@@ -567,31 +579,6 @@ public:
         return jsArray;
     }
 
-    void findContiguousSections(const VtArray<int>& faces, std::string& materialId, std::vector<Section>& sections, const VtArray<int>& faceVertexCounts) {
-        if (faces.empty()) return; // Return early if the input vector is empty
-
-        int currentStart = 0;
-        for (size_t i = 0; i < faces[0]; ++i) {
-            currentStart += (faceVertexCounts[i] - 2) * 3;
-        }
-
-        int currentLength = (faceVertexCounts[0] - 2) * 3;
-
-        for (size_t i = 1; i < faces.size(); ++i) {
-            if (faces[i] == faces[i - 1] + 1) {
-                currentLength += (faceVertexCounts[i] - 2) * 3;
-            } else {
-                sections.push_back({currentStart, currentLength, materialId});
-                currentStart = currentLength;
-                currentLength = (faceVertexCounts[i] - 2) * 3;
-            }
-        }
-
-        sections.push_back({currentStart, currentLength, materialId});
-
-        return;
-    }
-
     virtual void Sync(HdSceneDelegate *delegate,
                       HdRenderParam   *renderParam,
                       HdDirtyBits     *dirtyBits,
@@ -599,6 +586,23 @@ public:
     {
         // Get the id of this mesh. This is used to get various resources associated with it.
         SdfPath const& id = GetId();
+        const bool reprFlatShadingEnabled = _GetReprFlatShadingEnabled(reprToken);
+        const HdMeshGeomStyle reprGeomStyle = _GetReprGeomStyle(reprToken);
+        const bool reprDirty =
+            reprFlatShadingEnabled != _reprFlatShadingEnabled ||
+            reprGeomStyle != _reprGeomStyle;
+        if (reprDirty) {
+            _reprFlatShadingEnabled = reprFlatShadingEnabled;
+            _reprGeomStyle = reprGeomStyle;
+            _normalsValid = false;
+            _adjacencyValid = false;
+            _rPrim.With([&](val& rPrim) {
+                if (_HasJsMethod(rPrim, "setHydraReprStyle")) {
+                    rPrim.call<void>("setHydraReprStyle",
+                        _GetJsReprStyle(_reprGeomStyle));
+                }
+            });
+        }
 
         _UpdateVisibility(delegate, dirtyBits);
         _UpdateInstancer(delegate, dirtyBits);
@@ -637,25 +641,10 @@ public:
                 _topology = HdMeshTopology(delegate->GetMeshTopology(id), refineLevel);
                 fetchedTopology = true;
 
-                auto faceVertexCounts = _topology.GetFaceVertexCounts();
-                auto geomSubsets = _topology.GetGeomSubsets();
-                if (!geomSubsets.empty()){
-                    std::vector<Section> sections;
-                    for (const auto& geomSubset : geomSubsets) {
-                        auto materialID = geomSubset.materialId.GetAsString();
-                        findContiguousSections(geomSubset.indices, materialID, sections, faceVertexCounts);
-                    }
-
-                    if (sections.size() > 0 ) {
-                        _rPrim.With([&](val& rPrim) {
-                            emscripten::val jsSections = sectionsToJSArray(sections);
-                            rPrim.call<void>("setGeomSubsetMaterial", jsSections);
-                        });
-                    }
-                }
             }
             else {
                 _rPrim.With([&](val& rPrim) {
+                    rPrim.call<void>("setGeomSubsetMaterial", val::array());
                     rPrim.call<void>("setMaterial", materialId.GetAsString());
                 });
             }
@@ -681,24 +670,48 @@ public:
             _topology.SetSubdivTags(subdivTags);
         }
 
-        if (subdivTagsDirty && _topology.GetRefineLevel() > 0) {
-            _topology.SetSubdivTags(delegate->GetSubdivTags(id));
-        }
-
-        if (displayStyleDirty) {
+        if (topologyDirty || displayStyleDirty) {
             HdDisplayStyle const displayStyle = delegate->GetDisplayStyle(id);
-            _topology = HdMeshTopology(_topology, displayStyle.refineLevel);
+            int refineLevel = displayStyle.refineLevel;
+            if (_topology.GetScheme() == PxOsdOpenSubdivTokens->none) {
+                refineLevel = 0;
+            } else if (_topology.GetScheme() == PxOsdOpenSubdivTokens->loop &&
+                       refineLevel > 0 &&
+                       !_IsLoopSubdivisionTopologyValid(_topology)) {
+                TF_WARN("Cannot apply loop subdivision to <%s> due to "
+                    "non-triangular faces.", id.GetText());
+                refineLevel = 0;
+            }
+            _topology = HdMeshTopology(_topology, refineLevel);
             _displayStyleFlatShadingEnabled = displayStyle.flatShadingEnabled;
         }
 
-        if (pointsDirty || topologyDirty || subdivTagsDirty || displayStyleDirty) {
+        if ((topologyDirty || displayStyleDirty || subdivTagsDirty) &&
+            _topology.GetRefineLevel() > 0) {
+            _topology.SetSubdivTags(delegate->GetSubdivTags(id));
+        }
+
+        if (pointsDirty || topologyDirty || subdivTagsDirty || displayStyleDirty ||
+            reprDirty) {
             _UpdateDisplayGeometry();
             _normalsValid = false;
             _adjacencyValid = false;
         }
 
+        if ((*dirtyBits & HdChangeTracker::DirtyMaterialId) ||
+            topologyDirty || subdivTagsDirty || displayStyleDirty || reprDirty) {
+            _UpdateGeomSubsetMaterials(delegate);
+        }
+
         // Sync primvars
-        if (HdChangeTracker::IsAnyPrimvarDirty(*dirtyBits, id)) {
+        const bool normalsDirty =
+            HdChangeTracker::IsPrimvarDirty(*dirtyBits, id, HdTokens->normals);
+        if (normalsDirty) {
+            _normalsValid = false;
+        }
+        if (HdChangeTracker::IsAnyPrimvarDirty(*dirtyBits, id) ||
+            pointsDirty || topologyDirty || subdivTagsDirty ||
+            displayStyleDirty || reprDirty) {
             _SyncPrimvars(delegate, *dirtyBits);
         }
 
@@ -709,21 +722,44 @@ public:
         //    form of the topology that helps calculate smooth normals quickly.
         // 2. If the points are dirty, update the smooth normal buffer itself.
         if (_smoothNormals && !_adjacencyValid) {
-            const HdMeshTopology &displayTopology = _GetDisplayTopology();
-            _adjacency.BuildAdjacencyTable(&displayTopology);
+            _adjacency.BuildAdjacencyTable(&_topology);
             _adjacencyValid = true;
             // If we rebuilt the adjacency table, force a rebuild of normals.
             _normalsValid = false;
         }
 
         if (_smoothNormals && !_normalsValid) {
-            const VtVec3fArray &displayPoints = _GetDisplayPoints();
-            _computedNormals = Hd_SmoothNormals::ComputeSmoothNormals(
-                &_adjacency, displayPoints.size(), displayPoints.cdata());
+            VtVec3fArray coarseNormals = Hd_SmoothNormals::ComputeSmoothNormals(
+                &_adjacency, _points.size(), _points.cdata());
+            if (_usingRefinedTopology &&
+                !_RefineVertexOrVaryingPrimvar<GfVec3f>(
+                    coarseNormals,
+                    &_computedNormals,
+                    HdInterpolationVertex)) {
+                TF_WARN("Could not refine smooth normals for <%s>.",
+                    GetId().GetText());
+                Hd_VertexAdjacency displayAdjacency;
+                const HdMeshTopology &displayTopology = _GetDisplayTopology();
+                const VtVec3fArray &displayPoints = _GetDisplayPoints();
+                displayAdjacency.BuildAdjacencyTable(&displayTopology);
+                _computedNormals = Hd_SmoothNormals::ComputeSmoothNormals(
+                    &displayAdjacency,
+                    displayPoints.size(),
+                    displayPoints.cdata());
+            } else if (!_usingRefinedTopology) {
+                _computedNormals = coarseNormals;
+            }
             _normalsValid = true;
             _rPrim.With([&](val& rPrim) {
                 rPrim.call<void>("updateNormals", val(typed_memory_view(3 * _computedNormals.size(), reinterpret_cast<float*>(_computedNormals.data()))));
             });
+        }
+        else if (_ForceFlatNormals() && !_normalsValid) {
+            _UpdateFlatGeometricNormals();
+            _normalsValid = true;
+        }
+        else if (_hasAuthoredNormals) {
+            _normalsValid = true;
         }
         else if (!_smoothNormals && !_normalsValid) {
             _UpdateFlatGeometricNormals();
@@ -796,10 +832,8 @@ protected:
             _reprs.emplace_back(reprToken, HdReprSharedPtr());
         }
 
-        _reprFlatShadingEnabled = false;
-        for (HdMeshReprDesc const &desc : _GetReprDesc(reprToken)) {
-            _reprFlatShadingEnabled |= desc.flatShadingEnabled;
-        }
+        _reprFlatShadingEnabled = _GetReprFlatShadingEnabled(reprToken);
+        _reprGeomStyle = _GetReprGeomStyle(reprToken);
     }
 
 private:
@@ -849,8 +883,10 @@ private:
 
     bool _adjacencyValid;
     bool _normalsValid;
+    bool _hasAuthoredNormals;
     bool _smoothNormals;
     bool _reprFlatShadingEnabled;
+    HdMeshGeomStyle _reprGeomStyle;
     bool _displayStyleFlatShadingEnabled;
     bool _usingRefinedTopology = false;
 
@@ -862,11 +898,72 @@ private:
         return _usingRefinedTopology ? _displayPoints : _points;
     }
 
+    bool _GetReprFlatShadingEnabled(TfToken const &reprToken) const
+    {
+        bool reprFlatShadingEnabled = false;
+        for (HdMeshReprDesc const &desc : _GetReprDesc(reprToken)) {
+            reprFlatShadingEnabled |= desc.flatShadingEnabled;
+        }
+        return reprFlatShadingEnabled;
+    }
+
+    HdMeshGeomStyle _GetReprGeomStyle(TfToken const &reprToken) const
+    {
+        for (HdMeshReprDesc const &desc : _GetReprDesc(reprToken)) {
+            if (desc.geomStyle != HdMeshGeomStyleInvalid) {
+                return desc.geomStyle;
+            }
+        }
+        return HdMeshGeomStyleInvalid;
+    }
+
+    std::string _GetJsReprStyle(HdMeshGeomStyle geomStyle) const
+    {
+        switch (geomStyle) {
+            case HdMeshGeomStyleHullEdgeOnly:
+            case HdMeshGeomStyleEdgeOnly:
+                return "wire";
+            case HdMeshGeomStyleHullEdgeOnSurf:
+            case HdMeshGeomStyleEdgeOnSurf:
+                return "wireOnSurface";
+            case HdMeshGeomStylePoints:
+                return "points";
+            default:
+                return "surface";
+        }
+    }
+
+    int _GetEffectiveRefineLevel() const
+    {
+        switch (_reprGeomStyle) {
+            case HdMeshGeomStyleHull:
+            case HdMeshGeomStyleHullEdgeOnly:
+            case HdMeshGeomStyleHullEdgeOnSurf:
+                return 0;
+            default:
+                return _topology.GetRefineLevel();
+        }
+    }
+
+    bool _ForceFlatNormals() const
+    {
+        return _reprFlatShadingEnabled || _displayStyleFlatShadingEnabled;
+    }
+
+    bool _IsLoopSubdivisionTopologyValid(HdMeshTopology const &topology) const
+    {
+        VtIntArray const &faceVertexCounts = topology.GetFaceVertexCounts();
+        return std::find_if(
+            faceVertexCounts.cbegin(), faceVertexCounts.cend(),
+            [](int faceVertexCount) { return faceVertexCount != 3; })
+            == faceVertexCounts.cend();
+    }
+
     bool _UseSmoothNormals() const
     {
         // Mirrors Storm's HdStMesh::_UseSmoothNormals behavior for the
         // topology/display-style cases the web delegate materializes itself.
-        if (_displayStyleFlatShadingEnabled ||
+        if (_ForceFlatNormals() ||
             _topology.GetScheme() == PxOsdOpenSubdivTokens->none ||
             _topology.GetScheme() == PxOsdOpenSubdivTokens->bilinear) {
             return false;
@@ -880,9 +977,15 @@ private:
         _HdEmscriptenScopedTimer timer(
             std::string("_CreateTopologyRefiner ") + GetId().GetString() +
             (fvarTopologies ? " fvar" : " vertex"));
-        const int refineLevel = std::min(_topology.GetRefineLevel(), 3);
+        const int refineLevel = _GetEffectiveRefineLevel();
         if (refineLevel <= 0 ||
             _topology.GetScheme() == PxOsdOpenSubdivTokens->none) {
+            return nullptr;
+        }
+        if (_topology.GetScheme() == PxOsdOpenSubdivTokens->loop &&
+            !_IsLoopSubdivisionTopologyValid(_topology)) {
+            TF_WARN("Cannot apply loop subdivision to <%s> due to "
+                "non-triangular faces.", GetId().GetText());
             return nullptr;
         }
 
@@ -935,7 +1038,7 @@ private:
             values[i].value = coarseValues[i];
         }
 
-        const int refineLevel = std::min(_topology.GetRefineLevel(), 3);
+        const int refineLevel = _GetEffectiveRefineLevel();
         {
             _HdEmscriptenScopedTimer interpolateTimer(
                 std::string("_RefineVertexOrVaryingPrimvar interpolate ") +
@@ -1037,7 +1140,7 @@ private:
             values[i].value = coarseValues[i];
         }
 
-        const int refineLevel = std::min(_topology.GetRefineLevel(), 3);
+        const int refineLevel = _GetEffectiveRefineLevel();
         {
             _HdEmscriptenScopedTimer interpolateTimer(
                 std::string("_RefineFaceVaryingPrimvar interpolate ") +
@@ -1084,11 +1187,8 @@ private:
     {
         _HdEmscriptenScopedTimer timer(
             std::string("_UpdateFlatGeometricNormals ") + GetId().GetString());
-        const HdMeshTopology &displayTopology = _GetDisplayTopology();
         const VtVec3fArray &displayPoints = _GetDisplayPoints();
         VtVec3fArray orderedNormals(3 * _triangulatedIndices.size());
-        const bool flip =
-            displayTopology.GetOrientation() != HdTokens->rightHanded;
 
         for (size_t i = 0; i < _triangulatedIndices.size(); ++i) {
             GfVec3i const &triangle = _triangulatedIndices[i];
@@ -1102,9 +1202,6 @@ private:
             GfVec3f normal = GfCross(
                 displayPoints[triangle[1]] - displayPoints[triangle[0]],
                 displayPoints[triangle[2]] - displayPoints[triangle[0]]);
-            if (flip) {
-                normal *= -1.0f;
-            }
             if (normal.Normalize() == 0.0f) {
                 normal = GfVec3f(0.0f, 0.0f, 1.0f);
             }
@@ -1131,7 +1228,7 @@ private:
         _displayPoints.clear();
         _topologyRefiner.reset();
 
-        const int refineLevel = std::min(_topology.GetRefineLevel(), 3);
+        const int refineLevel = _GetEffectiveRefineLevel();
         if (_points.empty() ||
             refineLevel <= 0 ||
             _topology.GetScheme() == PxOsdOpenSubdivTokens->none) {
@@ -1265,6 +1362,75 @@ private:
                 val(typed_memory_view(
                     3 * _triangulatedIndices.size(),
                     reinterpret_cast<int32_t*>(_triangulatedIndices.data()))));
+        });
+    }
+
+    void _UpdateGeomSubsetMaterials(HdSceneDelegate *delegate)
+    {
+        _HdEmscriptenScopedTimer timer(
+            std::string("_UpdateGeomSubsetMaterials ") + GetId().GetString());
+        SdfPath const& id = GetId();
+        SdfPath const materialId = delegate->GetMaterialId(id);
+        if (!materialId.IsEmpty()) {
+            _rPrim.With([&](val& rPrim) {
+                rPrim.call<void>("setGeomSubsetMaterial", val::array());
+                rPrim.call<void>("setMaterial", materialId.GetAsString());
+            });
+            return;
+        }
+
+        std::map<int, std::string> coarseFaceMaterials;
+        for (HdGeomSubset const& geomSubset : _topology.GetGeomSubsets()) {
+            if (geomSubset.materialId.IsEmpty()) {
+                continue;
+            }
+            std::string const material = geomSubset.materialId.GetAsString();
+            for (int faceIndex : geomSubset.indices) {
+                coarseFaceMaterials[faceIndex] = material;
+            }
+        }
+
+        std::vector<Section> sections;
+        int currentStart = 0;
+        int currentLength = 0;
+        std::string currentMaterial;
+        auto flushSection = [&]() {
+            if (currentLength > 0) {
+                sections.push_back(
+                    {currentStart, currentLength, currentMaterial});
+                currentLength = 0;
+            }
+        };
+
+        for (size_t triIndex = 0; triIndex < _trianglePrimitiveParams.size();
+             ++triIndex) {
+            const int coarseFace =
+                HdMeshUtil::DecodeFaceIndexFromCoarseFaceParam(
+                    _trianglePrimitiveParams[triIndex]);
+            auto const materialIt = coarseFaceMaterials.find(coarseFace);
+            if (materialIt == coarseFaceMaterials.end()) {
+                flushSection();
+                continue;
+            }
+
+            const int start = static_cast<int>(triIndex * 3);
+            if (currentLength > 0 &&
+                currentMaterial == materialIt->second &&
+                currentStart + currentLength == start) {
+                currentLength += 3;
+            } else {
+                flushSection();
+                currentStart = start;
+                currentLength = 3;
+                currentMaterial = materialIt->second;
+            }
+        }
+        flushSection();
+
+        _rPrim.With([&](val& rPrim) {
+            rPrim.call<void>(
+                "setGeomSubsetMaterial",
+                sectionsToJSArray(sections));
         });
     }
 
@@ -1499,7 +1665,7 @@ private:
     }
 
     // Send primvar data to JS
-    void _SendPrimvar(
+    bool _SendPrimvar(
         const VtValue &value,
         const std::string &name,
         const HdInterpolation &interpolation,
@@ -1513,12 +1679,14 @@ private:
             _rPrim.With([&](val& rPrim) {
                 rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 1, ip);
             });
+            return true;
         }
         if (refinedValue.CanCast<VtIntArray>()) {
             VtIntArray primvarData = refinedValue.Get<VtIntArray>();
             _rPrim.With([&](val& rPrim) {
                 rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(primvarData.size(), reinterpret_cast<int32_t*>(primvarData.data()))), 1, ip);
             });
+            return true;
         }
         if (refinedValue.CanCast<VtBoolArray>()) {
             VtBoolArray primvarData = refinedValue.Get<VtBoolArray>();
@@ -1529,25 +1697,30 @@ private:
             _rPrim.With([&](val& rPrim) {
                 rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(intData.size(), reinterpret_cast<int32_t*>(intData.data()))), 1, ip);
             });
+            return true;
         }
         if (refinedValue.CanCast<VtVec2fArray>()) {
             VtVec2fArray primvarData = refinedValue.Get<VtVec2fArray>();
             _rPrim.With([&](val& rPrim) {
                 rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(2 * primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 2, ip);
             });
+            return true;
         }
         if (refinedValue.CanCast<VtVec3fArray>()) {
             VtVec3fArray primvarData = refinedValue.Get<VtVec3fArray>();
             _rPrim.With([&](val& rPrim) {
                 rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(3 * primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 3, ip);
             });
+            return true;
         }
         if (refinedValue.CanCast<VtVec4fArray>()) {
             VtVec4fArray primvarData = refinedValue.Get<VtVec4fArray>();
             _rPrim.With([&](val& rPrim) {
                 rPrim.call<void>("updatePrimvar", name, val(typed_memory_view(4 * primvarData.size(), reinterpret_cast<float*>(primvarData.data()))), 4, ip);
             });
+            return true;
         }
+        return false;
     }
 
     void _SyncPrimvars(HdSceneDelegate *delegate,
@@ -1556,6 +1729,8 @@ private:
         _HdEmscriptenScopedTimer timer(
             std::string("_SyncPrimvars ") + GetId().GetString());
         SdfPath const &id = GetId();
+        const bool hadAuthoredNormals = _hasAuthoredNormals;
+        _hasAuthoredNormals = false;
         for (size_t interpolation = HdInterpolationConstant;
                     interpolation < HdInterpolationCount;
                     ++interpolation) {
@@ -1569,7 +1744,8 @@ private:
                 HdPrimvarDescriptor const &primvar = primvars[primVarNum];
                 if (HdChangeTracker::IsPrimvarDirty(dirtyBits,
                                                     id,
-                                                    primvar.name)) {
+                                                    primvar.name) ||
+                    primvar.name == HdTokens->normals) {
                     _HdEmscriptenScopedTimer primvarTimer(
                         std::string("_SyncPrimvars primvar ") +
                         GetId().GetString() + " " +
@@ -1656,18 +1832,25 @@ private:
                                 continue;
                             }
 
-                            _SendPrimvar(
+                            if (_SendPrimvar(
                                 result == HdMeshComputationResult::Unchanged
                                     ? faceVaryingValue
                                     : triangulated,
                                 primvar.name.GetString(),
-                                ip);
+                                ip) &&
+                                primvar.name == HdTokens->normals) {
+                                _hasAuthoredNormals = true;
+                            }
                             break;
                         }
                         case HdInterpolationConstant:
                         case HdInterpolationVarying:
                         case HdInterpolationVertex: {
-                            _SendPrimvar(value, primvar.name.GetString(), ip);
+                            if (_SendPrimvar(
+                                    value, primvar.name.GetString(), ip) &&
+                                primvar.name == HdTokens->normals) {
+                                _hasAuthoredNormals = true;
+                            }
                             break;
                         }
                         case HdInterpolationUniform: {
@@ -1680,10 +1863,13 @@ private:
                                     GetId().GetText());
                                 continue;
                             }
-                            _SendPrimvar(
+                            if (_SendPrimvar(
                                 uniformValue,
                                 primvar.name.GetString(),
-                                HdInterpolationFaceVarying);
+                                HdInterpolationFaceVarying) &&
+                                primvar.name == HdTokens->normals) {
+                                _hasAuthoredNormals = true;
+                            }
                             break;
                         }
                         default:
@@ -1693,6 +1879,9 @@ private:
                     }
                 }
             }
+        }
+        if (hadAuthoredNormals && !_hasAuthoredNormals) {
+            _normalsValid = false;
         }
     }
 
@@ -1714,7 +1903,9 @@ public:
       });
     }
 
-    virtual ~Emscripten_Material() = default;
+    virtual ~Emscripten_Material() override {
+      _limitSurfaceMaterialState.erase(GetId());
+    }
 
     virtual void Sync(HdSceneDelegate *sceneDelegate,
                       HdRenderParam   *renderParam,
@@ -1739,6 +1930,8 @@ public:
       }
       HdMaterialNetworkMap const& hdNetworkMap =
           vtMat.UncheckedGet<HdMaterialNetworkMap>();
+      _limitSurfaceMaterialState[GetId()] =
+          _HasLimitSurfaceEvaluation(hdNetworkMap.config);
 
       _HdEmscriptenScopedTimer waitTimer(
           std::string("Emscripten_Material::Sync wait main ") +
