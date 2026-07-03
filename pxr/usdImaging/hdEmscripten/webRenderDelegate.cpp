@@ -867,7 +867,6 @@ private:
         // Mirrors Storm's HdStMesh::_UseSmoothNormals behavior for the
         // topology/display-style cases the web delegate materializes itself.
         if (_displayStyleFlatShadingEnabled ||
-            _reprFlatShadingEnabled ||
             _topology.GetScheme() == PxOsdOpenSubdivTokens->none ||
             _topology.GetScheme() == PxOsdOpenSubdivTokens->bilinear) {
             return false;
