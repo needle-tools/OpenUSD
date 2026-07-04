@@ -690,7 +690,7 @@ public:
         }
 
         if ((topologyDirty || displayStyleDirty || subdivTagsDirty) &&
-            _topology.GetRefineLevel() > 0) {
+            _topology.GetScheme() != PxOsdOpenSubdivTokens->none) {
             _topology.SetSubdivTags(delegate->GetSubdivTags(id));
         }
 
@@ -1007,6 +1007,102 @@ private:
         return refiner;
     }
 
+    bool _InterpolateSubdivisionPoints(
+        PxOsdTopologyRefinerSharedPtr const &refiner,
+        int refineLevel,
+        VtVec3fArray *refinedPoints) const
+    {
+        if (!refiner || !refinedPoints) {
+            return false;
+        }
+
+        const int coarseVertexCount = refiner->GetLevel(0).GetNumVertices();
+        if (static_cast<size_t>(coarseVertexCount) > _points.size()) {
+            TF_WARN("OpenSubdiv topology for <%s> references %d coarse points, "
+                "but Hydra provided %zu points.",
+                GetId().GetText(), coarseVertexCount, _points.size());
+            return false;
+        }
+
+        std::vector<_OsdVertex> vertices(refiner->GetNumVerticesTotal());
+        for (int i = 0; i < coarseVertexCount; ++i) {
+            vertices[i].position[0] = _points[i][0];
+            vertices[i].position[1] = _points[i][1];
+            vertices[i].position[2] = _points[i][2];
+        }
+
+        {
+            _HdEmscriptenScopedTimer interpolateTimer(
+                std::string("_InterpolateSubdivisionPoints ") +
+                GetId().GetString());
+            OpenSubdiv::Far::PrimvarRefiner primvarRefiner(*refiner);
+            _OsdVertex *src = vertices.data();
+            for (int level = 1; level <= refineLevel; ++level) {
+                _OsdVertex *dst =
+                    src + refiner->GetLevel(level - 1).GetNumVertices();
+                primvarRefiner.Interpolate(level, src, dst);
+                src = dst;
+            }
+        }
+
+        OpenSubdiv::Far::TopologyLevel const &lastLevel =
+            refiner->GetLevel(refineLevel);
+        const int refinedVertexCount = lastLevel.GetNumVertices();
+        const int firstRefinedVertex =
+            refiner->GetNumVerticesTotal() - refinedVertexCount;
+
+        refinedPoints->resize(refinedVertexCount);
+        for (int i = 0; i < refinedVertexCount; ++i) {
+            _OsdVertex const &vertex = vertices[firstRefinedVertex + i];
+            (*refinedPoints)[i] = GfVec3f(
+                vertex.position[0],
+                vertex.position[1],
+                vertex.position[2]);
+        }
+        return true;
+    }
+
+    bool _BuildSubdivisionDisplayTopology(
+        PxOsdTopologyRefinerSharedPtr const &refiner,
+        int refineLevel,
+        HdMeshTopology *displayTopology) const
+    {
+        if (!refiner || !displayTopology) {
+            return false;
+        }
+
+        OpenSubdiv::Far::TopologyLevel const &lastLevel =
+            refiner->GetLevel(refineLevel);
+        VtIntArray faceVertexCounts;
+        VtIntArray faceVertexIndices;
+
+        const int faceCount = lastLevel.GetNumFaces();
+        faceVertexCounts.reserve(faceCount);
+        faceVertexIndices.reserve(lastLevel.GetNumFaceVertices());
+        for (int face = 0; face < faceCount; ++face) {
+            OpenSubdiv::Far::ConstIndexArray faceVertices =
+                lastLevel.GetFaceVertices(face);
+            if (faceVertices.size() < 3) {
+                continue;
+            }
+
+            faceVertexCounts.push_back(static_cast<int>(faceVertices.size()));
+            for (int vertex = 0; vertex < faceVertices.size(); ++vertex) {
+                faceVertexIndices.push_back(faceVertices[vertex]);
+            }
+        }
+
+        // PxOsdRefinerFactory applies topology orientation while building the
+        // OpenSubdiv refiner, so the materialized refined topology is RH.
+        *displayTopology = HdMeshTopology(
+            PxOsdOpenSubdivTokens->none,
+            HdTokens->rightHanded,
+            faceVertexCounts,
+            faceVertexIndices,
+            0);
+        return true;
+    }
+
     template <class VecT, class ArrayT>
     bool _RefineVertexOrVaryingPrimvar(
         ArrayT const &coarseValues,
@@ -1246,86 +1342,26 @@ private:
         }
         _topologyRefiner = refiner;
 
-        const int coarseVertexCount = refiner->GetLevel(0).GetNumVertices();
-        if (static_cast<size_t>(coarseVertexCount) > _points.size()) {
-            TF_WARN("OpenSubdiv topology for <%s> references %d coarse points, "
-                "but Hydra provided %zu points.",
-                GetId().GetText(), coarseVertexCount, _points.size());
-            return false;
-        }
-
-        std::vector<_OsdVertex> vertices(refiner->GetNumVerticesTotal());
-        for (int i = 0; i < coarseVertexCount; ++i) {
-            vertices[i].position[0] = _points[i][0];
-            vertices[i].position[1] = _points[i][1];
-            vertices[i].position[2] = _points[i][2];
-        }
-
-        {
-            _HdEmscriptenScopedTimer interpolateTimer(
-                std::string("_BuildRefinedTopology interpolate points ") +
-                GetId().GetString());
-            OpenSubdiv::Far::PrimvarRefiner primvarRefiner(*refiner);
-            _OsdVertex *src = vertices.data();
-            for (int level = 1; level <= refineLevel; ++level) {
-                _OsdVertex *dst =
-                    src + refiner->GetLevel(level - 1).GetNumVertices();
-                primvarRefiner.Interpolate(level, src, dst);
-                src = dst;
-            }
-        }
-
-        OpenSubdiv::Far::TopologyLevel const &lastLevel =
-            refiner->GetLevel(refineLevel);
-        const int refinedVertexCount = lastLevel.GetNumVertices();
-        const int firstRefinedVertex =
-            refiner->GetNumVerticesTotal() - refinedVertexCount;
-
         {
             _HdEmscriptenScopedTimer copyTimer(
                 std::string("_BuildRefinedTopology copy points ") +
                 GetId().GetString());
-            _displayPoints.resize(refinedVertexCount);
-            for (int i = 0; i < refinedVertexCount; ++i) {
-                _OsdVertex const &vertex = vertices[firstRefinedVertex + i];
-                _displayPoints[i] = GfVec3f(
-                    vertex.position[0],
-                    vertex.position[1],
-                    vertex.position[2]);
+            if (!_InterpolateSubdivisionPoints(
+                    refiner, refineLevel, &_displayPoints)) {
+                return false;
             }
         }
 
-        VtIntArray faceVertexCounts;
-        VtIntArray faceVertexIndices;
         {
             _HdEmscriptenScopedTimer displayTopologyTimer(
                 std::string("_BuildRefinedTopology display topology ") +
                 GetId().GetString());
-            const int faceCount = lastLevel.GetNumFaces();
-            faceVertexCounts.reserve(faceCount);
-            faceVertexIndices.reserve(lastLevel.GetNumFaceVertices());
-            for (int face = 0; face < faceCount; ++face) {
-                OpenSubdiv::Far::ConstIndexArray faceVertices =
-                    lastLevel.GetFaceVertices(face);
-                if (faceVertices.size() < 3) {
-                    continue;
-                }
-
-                faceVertexCounts.push_back(static_cast<int>(faceVertices.size()));
-                for (int vertex = 0; vertex < faceVertices.size(); ++vertex) {
-                    faceVertexIndices.push_back(faceVertices[vertex]);
-                }
+            if (!_BuildSubdivisionDisplayTopology(
+                    refiner, refineLevel, &_displayTopology)) {
+                return false;
             }
         }
 
-        // PxOsdRefinerFactory applies topology orientation while building the
-        // OpenSubdiv refiner, so the materialized refined topology is RH.
-        _displayTopology = HdMeshTopology(
-            PxOsdOpenSubdivTokens->none,
-            HdTokens->rightHanded,
-            faceVertexCounts,
-            faceVertexIndices,
-            0);
         _usingRefinedTopology = true;
         return true;
     }
