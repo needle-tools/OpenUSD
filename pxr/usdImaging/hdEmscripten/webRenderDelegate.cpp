@@ -1939,6 +1939,12 @@ private:
                         primVarNum < numPrimVars;
                     ++primVarNum) {
                 HdPrimvarDescriptor const &primvar = primvars[primVarNum];
+                if (primvar.name == HdTokens->normals &&
+                    (_ForceFlatNormals() || _UseSmoothNormals())) {
+                    // Match Storm's normal source precedence: generated flat,
+                    // limit, or smooth normals own shading before scene normals.
+                    continue;
+                }
                 if (HdChangeTracker::IsPrimvarDirty(dirtyBits,
                                                     id,
                                                     primvar.name) ||
