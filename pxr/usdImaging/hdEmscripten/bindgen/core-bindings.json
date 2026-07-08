@@ -41,6 +41,7 @@
         { "jsName": "SetDouble", "tsArgs": [{ "name": "value", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetDouble" },
         { "jsName": "SetString", "tsArgs": [{ "name": "value", "type": "string" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetString" },
         { "jsName": "SetToken", "tsArgs": [{ "name": "value", "type": "string" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetToken" },
+        { "jsName": "Set", "tsArgs": [{ "name": "value", "type": "unknown" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetVal" },
         { "jsName": "AddConnection", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "boolean", "op": "attributeAddConnection" },
         { "jsName": "SetColor3f", "tsArgs": [{ "name": "r", "type": "number" }, { "name": "g", "type": "number" }, { "name": "b", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetColor3f" },
         { "jsName": "SetVec3f", "tsArgs": [{ "name": "x", "type": "number" }, { "name": "y", "type": "number" }, { "name": "z", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetVec3f" },
@@ -149,10 +150,91 @@
       ]
     }
   ],
+  "schemas": [
+    {
+      "cppType": "pxr::UsdGeomXform",
+      "jsName": "UsdGeomXform",
+      "tsName": "UsdGeomXform",
+      "extraMethods": ["AddTranslateOp", "AddRotateXYZOp", "AddScaleOp", "AddTransformOp"]
+    },
+    {
+      "cppType": "pxr::UsdGeomScope",
+      "jsName": "UsdGeomScope",
+      "tsName": "UsdGeomScope"
+    },
+    {
+      "cppType": "pxr::UsdGeomSphere",
+      "jsName": "UsdGeomSphere",
+      "tsName": "UsdGeomSphere",
+      "extraMethods": ["AddTranslateOp", "AddRotateXYZOp", "AddScaleOp", "AddTransformOp", "MakeVisible", "MakeInvisible"],
+      "attributes": [
+        { "name": "Radius" },
+        { "name": "DisplayColor" },
+        { "name": "Purpose" }
+      ]
+    },
+    {
+      "cppType": "pxr::UsdGeomCube",
+      "jsName": "UsdGeomCube",
+      "tsName": "UsdGeomCube",
+      "extraMethods": ["AddTranslateOp", "AddRotateXYZOp", "AddScaleOp", "AddTransformOp", "MakeVisible", "MakeInvisible"],
+      "attributes": [
+        { "name": "Size" },
+        { "name": "DisplayColor" },
+        { "name": "Purpose" }
+      ]
+    },
+    {
+      "cppType": "pxr::UsdGeomMesh",
+      "jsName": "UsdGeomMesh",
+      "tsName": "UsdGeomMesh",
+      "extraMethods": ["AddTranslateOp", "AddRotateXYZOp", "AddScaleOp", "AddTransformOp", "MakeVisible", "MakeInvisible"],
+      "attributes": [
+        { "name": "Points" },
+        { "name": "FaceVertexCounts" },
+        { "name": "FaceVertexIndices" },
+        { "name": "DisplayColor" },
+        { "name": "Purpose" }
+      ]
+    },
+    {
+      "cppType": "pxr::UsdGeomCamera",
+      "jsName": "UsdGeomCamera",
+      "tsName": "UsdGeomCamera",
+      "extraMethods": ["AddTranslateOp", "AddRotateXYZOp", "AddScaleOp", "AddTransformOp", "MakeVisible", "MakeInvisible"],
+      "attributes": [
+        { "name": "FocalLength" },
+        { "name": "FocusDistance" }
+      ]
+    },
+    {
+      "cppType": "pxr::UsdShadeMaterial",
+      "jsName": "UsdShadeMaterial",
+      "tsName": "UsdShadeMaterial",
+      "methods": [
+        { "jsName": "CreateSurfaceOutput", "tsArgs": [{ "name": "renderContext", "type": "string" }], "tsReturn": "UsdShadeOutput", "cpp": "emscripten::optional_override([](pxr::UsdShadeMaterial const& material, std::string const& renderContext) { return material.CreateSurfaceOutput(pxr::TfToken(renderContext)); })" }
+      ]
+    },
+    {
+      "cppType": "pxr::UsdShadeShader",
+      "jsName": "UsdShadeShader",
+      "tsName": "UsdShadeShader",
+      "attributes": [
+        { "name": "Id" }
+      ],
+      "methods": [
+        { "jsName": "CreateInput", "tsArgs": [{ "name": "name", "type": "string" }, { "name": "typeName", "type": "string" }], "tsReturn": "UsdShadeInput", "cpp": "emscripten::optional_override([](pxr::UsdShadeShader& shader, std::string const& name, std::string const& typeName) { return shader.CreateInput(pxr::TfToken(name), pxr::hdEmscriptenGenerated::_FindValueTypeName(typeName)); })" },
+        { "jsName": "CreateOutput", "tsArgs": [{ "name": "name", "type": "string" }, { "name": "typeName", "type": "string" }], "tsReturn": "UsdShadeOutput", "cpp": "emscripten::optional_override([](pxr::UsdShadeShader& shader, std::string const& name, std::string const& typeName) { return shader.CreateOutput(pxr::TfToken(name), pxr::hdEmscriptenGenerated::_FindValueTypeName(typeName)); })" }
+      ]
+    }
+  ],
   "vectors": [
     { "cppType": "int", "jsName": "VectorInt", "tsName": "IntVector", "elementType": "number" },
+    { "cppType": "float", "jsName": "VectorFloat", "tsName": "FloatVector", "elementType": "number" },
     { "cppType": "double", "jsName": "VectorDouble", "tsName": "DoubleVector", "elementType": "number" },
     { "cppType": "std::string", "jsName": "VectorString", "tsName": "StringVector", "elementType": "string" },
+    { "cppType": "pxr::GfVec3f", "jsName": "VectorVec3f", "tsName": "GfVec3fVector", "elementType": "GfVec3f" },
+    { "cppType": "pxr::GfVec3d", "jsName": "VectorVec3d", "tsName": "GfVec3dVector", "elementType": "GfVec3d" },
     { "cppType": "pxr::UsdPrim", "jsName": "VectorPrim", "tsName": "USDPrimVector", "elementType": "USDPrim" },
     { "cppType": "pxr::UsdAttribute", "jsName": "VectorAttribute", "tsName": "USDAttributeVector", "elementType": "USDAttribute" },
     { "cppType": "pxr::UsdRelationship", "jsName": "VectorRelationship", "tsName": "USDRelationshipVector", "elementType": "USDRelationship" }
