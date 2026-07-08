@@ -1155,15 +1155,19 @@ def generate_dts(manifest: dict) -> str:
         "",
         "declare type MaybePromise<T> = T | Promise<T>",
         "",
+        "/** @internal Low-level Emscripten std::vector wrapper, not a USD authoring API. */",
+        "declare type EmbindVector<T> = {",
+        "    size(): number,",
+        "    get(index: number): T,",
+        "    /** @internal C++ std::vector append hook exposed by embind. */",
+        "    push_back(value: T): void,",
+        "    delete(): void,",
+        "}",
+        "",
     ]
     for vector in manifest.get("vectors", []):
         lines.extend([
-            f"declare type {vector['tsName']} = {{",
-            "    size(): number,",
-            f"    get(index: number): {vector['elementType']},",
-            f"    push_back(value: {vector['elementType']}): void,",
-            "    delete(): void,",
-            "}",
+            f"declare type {vector['tsName']} = EmbindVector<{vector['elementType']}>",
             "",
         ])
     lines.extend([
