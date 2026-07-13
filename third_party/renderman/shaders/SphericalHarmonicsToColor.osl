@@ -5,10 +5,6 @@ shader SphericalHarmonicsToColor(
     output color resultRGB = color(0, 0, 0)
 )
 {
-    // Read how many degrees we have from primvar
-    int degree = 0;
-    getattribute("primvar", "radiance:sphericalHarmonicsDegree", degree);
-
     // Read our coefficients from primvars
     color sh00 = color(0, 0, 0);
     getattribute("primvar", "radiance:sphericalHarmonicsCoefficients00", sh00);
@@ -16,8 +12,9 @@ shader SphericalHarmonicsToColor(
     color sh10 = color(0, 0, 0);
     color sh11 = color(0, 0, 0);
     color sh12 = color(0, 0, 0);
-    if (degree > 0) {
-        getattribute("primvar", "radiance:sphericalHarmonicsCoefficients10", sh10);
+    int hasDegree1 = getattribute(
+        "primvar", "radiance:sphericalHarmonicsCoefficients10", sh10);
+    if (hasDegree1) {
         getattribute("primvar", "radiance:sphericalHarmonicsCoefficients11", sh11);
         getattribute("primvar", "radiance:sphericalHarmonicsCoefficients12", sh12);
     }
@@ -27,8 +24,9 @@ shader SphericalHarmonicsToColor(
     color sh22 = color(0, 0, 0);
     color sh23 = color(0, 0, 0);
     color sh24 = color(0, 0, 0);
-    if (degree > 1) {
-        getattribute("primvar", "radiance:sphericalHarmonicsCoefficients20", sh20);
+    int hasDegree2 = getattribute(
+        "primvar", "radiance:sphericalHarmonicsCoefficients20", sh20);
+    if (hasDegree2) {
         getattribute("primvar", "radiance:sphericalHarmonicsCoefficients21", sh21);
         getattribute("primvar", "radiance:sphericalHarmonicsCoefficients22", sh22);
         getattribute("primvar", "radiance:sphericalHarmonicsCoefficients23", sh23);
@@ -42,8 +40,9 @@ shader SphericalHarmonicsToColor(
     color sh34 = color(0, 0, 0);
     color sh35 = color(0, 0, 0);
     color sh36 = color(0, 0, 0);
-    if (degree > 2) {
-        getattribute("primvar", "radiance:sphericalHarmonicsCoefficients30", sh30);
+    int hasDegree3 = getattribute(
+        "primvar", "radiance:sphericalHarmonicsCoefficients30", sh30);
+    if (hasDegree3) {
         getattribute("primvar", "radiance:sphericalHarmonicsCoefficients31", sh31);
         getattribute("primvar", "radiance:sphericalHarmonicsCoefficients32", sh32);
         getattribute("primvar", "radiance:sphericalHarmonicsCoefficients33", sh33);
@@ -81,12 +80,12 @@ shader SphericalHarmonicsToColor(
     // Calculate the display color
     resultRGB = C0 * sh00;
 
-    if (degree > 0) {
+    if (hasDegree1) {
         resultRGB -= C1 * y * sh10;
         resultRGB += C1 * z * sh11;
         resultRGB -= C1 * x * sh12;
 
-        if (degree > 1) {
+        if (hasDegree2) {
             float xx = x * x;
             float yy = y * y;
             float zz = z * z;
@@ -100,7 +99,7 @@ shader SphericalHarmonicsToColor(
             resultRGB += C2[3] * xz * sh23;
             resultRGB += C2[4] * (xx - yy) * sh24;
 
-            if (degree > 2) {
+            if (hasDegree3) {
                 resultRGB += C3[0] * y * (3.0 * xx - yy) * sh30;
                 resultRGB += C3[1] * xy * z * sh31;
                 resultRGB += C3[2] * y * (4.0 * zz - xx - yy) * sh32;
