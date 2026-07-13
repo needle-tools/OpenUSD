@@ -7,10 +7,26 @@ source "${SCRIPT_DIR}/env.sh"
 
 native_env
 cd "${OPENUSD_ROOT}"
+unset PXR_PLUGINPATH_NAME
 
-usdcat --help >/tmp/openusd-2605-usdcat-help.txt
+native_arch=""
+if [[ "$(uname -m)" == "arm64" ]] && \
+   file "${OPENUSD_NATIVE_PREFIX}/bin/usdcat" | grep -q 'x86_64'; then
+  native_arch="x86_64"
+fi
 
-"${PYTHON_BIN}" - <<'PY'
+run_native() {
+  if [[ -n "${native_arch}" ]]; then
+    arch -"${native_arch}" "$@"
+  else
+    "$@"
+  fi
+}
+
+run_native "${OPENUSD_NATIVE_PREFIX}/bin/usdcat" --help \
+  >/tmp/openusd-2605-usdcat-help.txt
+
+run_native "${PYTHON_BIN}" - <<'PY'
 from pxr import Plug, Sdf, Usd, UsdGeom
 
 mtlx = Sdf.FileFormat.FindByExtension("mtlx")
@@ -28,28 +44,34 @@ UsdGeom.Sphere.Define(stage, "/Sphere")
 stage.GetRootLayer().Save()
 PY
 
-usdcat pxr/usdImaging/usdImagingGL/testenv/testUsdImagingGLMaterialXBasic/basicMxZup.usda \
+run_native "${OPENUSD_NATIVE_PREFIX}/bin/usdcat" \
+  pxr/usdImaging/usdImagingGL/testenv/testUsdImagingGLMaterialXBasic/basicMxZup.usda \
   -o /tmp/openusd-2605-basicMxZup.usda
 
 test -s /tmp/openusd-2605-basicMxZup.usda
 
-usdrecord --renderer Embree --disableGpu --imageWidth 64 \
+run_native "${PYTHON_BIN}" "${OPENUSD_NATIVE_PREFIX}/bin/usdrecord" \
+  --renderer Embree --disableGpu --imageWidth 64 \
   /tmp/openusd-2605-embree-sphere.usda \
   /tmp/openusd-2605-embree-sphere.png
 test -s /tmp/openusd-2605-embree-sphere.png
 
-PRMAN_LOCATION="${PRMAN_LOCATION:-/Applications/Pixar/RenderManProServer-26.3}"
-if [[ -x "${PRMAN_LOCATION}/bin/prman" && -f "${PRMAN_LOCATION}/include/prmanapi.h" ]]; then
-  "${PYTHON_BIN}" - <<'PY'
+PRMAN_LOCATION="${PRMAN_LOCATION:-/Applications/Pixar/RenderManProServer-27.2}"
+if run_native "${PYTHON_BIN}" - <<'PY'
 from pxr import Plug
 
-assert any(p.name == "hdPrmanLoader" for p in Plug.Registry().GetAllPlugins())
+raise SystemExit(
+    0 if any(p.name == "hdPrmanLoader" for p in Plug.Registry().GetAllPlugins())
+    else 1)
 PY
+then
+  test -x "${PRMAN_LOCATION}/bin/prman"
+  test -f "${PRMAN_LOCATION}/include/prmanapi.h"
 elif [[ "${REQUIRE_PRMAN:-0}" == "1" ]]; then
-  echo "RenderMan SDK is incomplete at ${PRMAN_LOCATION}; expected bin/prman and include/prmanapi.h" >&2
+  echo "hdPrman was not found in ${OPENUSD_NATIVE_PREFIX}" >&2
   exit 1
 else
-  echo "RenderMan SDK unavailable at ${PRMAN_LOCATION}; hdPrman was not built"
+  echo "hdPrman was not built in ${OPENUSD_NATIVE_PREFIX}"
 fi
 
 echo "native-openusd smoke ok"

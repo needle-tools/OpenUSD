@@ -23,6 +23,7 @@ Run them from anywhere; each script computes the OpenUSD source root relative to
 ## Current Known Prefixes
 
 - Native OpenUSD: `/Users/herbst/OpenUSD-26.05-native`
+- Native OpenUSD with RenderMan (x86_64): `/Users/herbst/OpenUSD-26.05-native-x86_64`
 - Upstream wasm OpenUSD: `/Users/herbst/OpenUSD-26.05-wasm`
 - Adobe glTF plugin: `/Users/herbst/USD-Fileformat-plugins-2026.03-openusd-26.05`
 - Wasm Hydra experiment build: `/Users/herbst/OpenUSD-26.05-wasm-hydra-exp-build`
@@ -33,7 +34,33 @@ Run them from anywhere; each script computes the OpenUSD source root relative to
 
 ## Notes
 
-The native prefix is configured with Embree 4.3.3 and `PXR_BUILD_EMBREE_PLUGIN=ON`. Reproduce that build with `build_usd.py --embree`. RenderMan additionally requires a separately installed RenderMan Pro Server SDK; pass both `--prman` and `--prman-location /path/to/RenderManProServer` once that directory contains `bin/prman`, `include/prmanapi.h`, and the RenderMan libraries. An empty application receipt is not a usable SDK.
+The arm64 native prefix is configured with Embree 4.3.3 and
+`PXR_BUILD_EMBREE_PLUGIN=ON`. Reproduce that build with
+`build_usd.py --embree`.
+
+Pixar's macOS RenderMan Pro Server 27.2 SDK is x86_64, so it cannot be loaded
+into the arm64 native process. The separate x86_64 prefix includes usdview,
+Draco, MaterialX, Embree, and hdPrman. Reproduce it under Rosetta with:
+
+```sh
+arch -x86_64 /usr/local/bin/python3 build_scripts/build_usd.py \
+  /Users/herbst/OpenUSD-26.05-native-x86_64 \
+  --build-target x86_64 \
+  --prman \
+  --prman-location /Applications/Pixar/RenderManProServer-27.2 \
+  --embree \
+  --draco \
+  --usdview \
+  --materialx \
+  --python \
+  --tools \
+  --usdValidation \
+  --no-tests \
+  --no-examples \
+  --no-tutorials \
+  --no-docs \
+  --no-python-docs
+```
 
 The upstream OpenUSD 26.05 wasm target builds and runs the `wasmFetchResolver` sample, but it does not produce the viewer's `emHdBindings.*` artifacts.
 
