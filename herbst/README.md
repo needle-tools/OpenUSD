@@ -7,7 +7,7 @@ Run them from anywhere; each script computes the OpenUSD source root relative to
 ## Layout
 
 - `smoke/env.sh`: shared paths and environment helpers.
-- `smoke/native-openusd.sh`: verifies the native OpenUSD 26.05 build, MaterialX plugin, and a MaterialX sample.
+- `smoke/native-openusd.sh`: verifies the native OpenUSD 26.05 build, MaterialX, and an actual CPU render through hdEmbree. Set `REQUIRE_PRMAN=1` to require a complete RenderMan SDK and hdPrman plugin too.
 - `smoke/adobe-gltf-plugin.sh`: verifies Adobe's glTF plugin against the native OpenUSD build.
 - `smoke/wasm-fetch-resolver-browser.js`: browser smoke test for upstream OpenUSD's installed wasm fetch resolver sample.
 - `smoke/wasm-fetch-resolver.sh`: starts the upstream wasm sample server and runs the browser smoke test.
@@ -32,6 +32,8 @@ Run them from anywhere; each script computes the OpenUSD source root relative to
 - Wasm Hydra MaterialX probe install: `/Users/herbst/OpenUSD-26.05-wasm-hydra-mtlx-probe`
 
 ## Notes
+
+The native prefix is configured with Embree 4.3.3 and `PXR_BUILD_EMBREE_PLUGIN=ON`. Reproduce that build with `build_usd.py --embree`. RenderMan additionally requires a separately installed RenderMan Pro Server SDK; pass both `--prman` and `--prman-location /path/to/RenderManProServer` once that directory contains `bin/prman`, `include/prmanapi.h`, and the RenderMan libraries. An empty application receipt is not a usable SDK.
 
 The upstream OpenUSD 26.05 wasm target builds and runs the `wasmFetchResolver` sample, but it does not produce the viewer's `emHdBindings.*` artifacts.
 

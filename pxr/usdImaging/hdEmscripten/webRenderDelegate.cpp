@@ -50,6 +50,8 @@
 #include "pxr/base/gf/matrix4d.h"
 #include "pxr/base/gf/range1f.h"
 #include "pxr/base/gf/quaternion.h"
+#include "pxr/base/gf/quatf.h"
+#include "pxr/base/gf/quath.h"
 
 #include <opensubdiv/far/primvarRefiner.h>
 #include <opensubdiv/far/ptexIndices.h>
@@ -1935,6 +1937,308 @@ private:
     Emscripten_Rprim &operator =(const Emscripten_Rprim &) = delete;
 };
 
+class Emscripten_ParticleField final : public HdRprim {
+public:
+    Emscripten_ParticleField(
+        SdfPath const& id,
+        emscripten::val *renderDelegateInterface)
+        : HdRprim(id)
+        , _renderDelegateInterface(renderDelegateInterface)
+    {
+        const std::string path = id.GetAsString();
+        const std::string typeName = "particleField";
+        runInMainThread([this, path, typeName]() {
+            _rPrim.AssignFromMainThread(_renderDelegateInterface->call<val>(
+                "createRPrim", typeName, path));
+        });
+    }
+
+    void Sync(
+        HdSceneDelegate *delegate,
+        HdRenderParam *renderParam,
+        HdDirtyBits *dirtyBits,
+        TfToken const &reprToken) override
+    {
+        SdfPath const &id = GetId();
+
+        _UpdateVisibility(delegate, dirtyBits);
+        _UpdateInstancer(delegate, dirtyBits);
+        TfToken const renderTag = GetRenderTag();
+        const bool visible = IsVisible() && renderTag != HdRenderTagTokens->hidden;
+        _rPrim.With([&](val& rPrim) {
+            rPrim.call<void>(
+                "setVisibilityState", visible, renderTag.GetString());
+        });
+
+        if (HdChangeTracker::IsAnyPrimvarDirty(*dirtyBits, id)) {
+            std::vector<float> positions;
+            std::vector<float> orientations;
+            std::vector<float> scales;
+            std::vector<float> opacities;
+            std::vector<float> coefficients;
+
+            _CopyVec3Array(delegate->Get(id, _PositionsToken()), &positions);
+            _CopyQuatArray(
+                delegate->Get(id, _OrientationsToken()), &orientations);
+            _CopyVec3Array(delegate->Get(id, _ScalesToken()), &scales);
+            _CopyScalarArray(delegate->Get(id, _OpacitiesToken()), &opacities);
+            _CopyVec3Array(
+                delegate->Get(id, _CoefficientsToken()), &coefficients);
+
+            int degree = 0;
+            VtValue degreeValue = delegate->Get(id, _DegreeToken());
+            if (degreeValue.IsHolding<int>()) {
+                degree = degreeValue.UncheckedGet<int>();
+            }
+
+            const std::string projectionMode = _GetTokenValue(
+                delegate->Get(id, _ProjectionModeHintToken()), "perspective");
+            const std::string sortingMode = _GetTokenValue(
+                delegate->Get(id, _SortingModeHintToken()), "zDepth");
+
+            _rPrim.With([&](val& rPrim) {
+                rPrim.call<void>(
+                    "setParticleFieldData",
+                    _FloatArrayView(positions),
+                    _FloatArrayView(orientations),
+                    _FloatArrayView(scales),
+                    _FloatArrayView(opacities),
+                    degree,
+                    _FloatArrayView(coefficients),
+                    projectionMode,
+                    sortingMode);
+            });
+        }
+
+        if (HdChangeTracker::IsTransformDirty(*dirtyBits, id)) {
+            _transform = GfMatrix4f(delegate->GetTransform(id));
+            _rPrim.With([&](val& rPrim) {
+                rPrim.call<void>(
+                    "setTransform",
+                    val(typed_memory_view(
+                        16, reinterpret_cast<float*>(_transform.data()))));
+            });
+        }
+
+        if (HdChangeTracker::IsInstancerDirty(*dirtyBits, id) ||
+            HdChangeTracker::IsTransformDirty(*dirtyBits, id)) {
+            HdInstancer::_SyncInstancerAndParents(
+                delegate->GetRenderIndex(), GetInstancerId());
+
+            std::vector<GfMatrix4f> transforms;
+            if (!GetInstancerId().IsEmpty()) {
+                HdInstancer *instancer =
+                    delegate->GetRenderIndex().GetInstancer(GetInstancerId());
+                Emscripten_Instancer *emscriptenInstancer =
+                    dynamic_cast<Emscripten_Instancer*>(instancer);
+                if (emscriptenInstancer) {
+                    VtMatrix4dArray instanceTransforms =
+                        emscriptenInstancer->ComputeInstanceTransforms(id);
+                    transforms.reserve(instanceTransforms.size());
+                    for (GfMatrix4d const &instanceTransform : instanceTransforms) {
+                        transforms.push_back(
+                            _transform * GfMatrix4f(instanceTransform));
+                    }
+                }
+            }
+
+            _rPrim.With([&](val& rPrim) {
+                rPrim.call<void>(
+                    "setInstanceTransforms",
+                    transforms.empty()
+                        ? val::global("Float32Array").new_(0)
+                        : val(typed_memory_view(
+                            16 * transforms.size(),
+                            reinterpret_cast<float*>(transforms.data()))),
+                    static_cast<int>(transforms.size()));
+            });
+        }
+
+        *dirtyBits &= ~HdChangeTracker::AllSceneDirtyBits;
+    }
+
+    HdDirtyBits GetInitialDirtyBitsMask() const override
+    {
+        return HdChangeTracker::AllSceneDirtyBits &
+            ~HdChangeTracker::Varying;
+    }
+
+    TfTokenVector const &GetBuiltinPrimvarNames() const override
+    {
+        static const TfTokenVector names = {
+            _PositionsToken(),
+            _OrientationsToken(),
+            _ScalesToken(),
+            _OpacitiesToken(),
+            _DegreeToken(),
+            _CoefficientsToken()
+        };
+        return names;
+    }
+
+protected:
+    HdDirtyBits _PropagateDirtyBits(HdDirtyBits bits) const override
+    {
+        return bits;
+    }
+
+    void _InitRepr(TfToken const &reprToken, HdDirtyBits *dirtyBits) override
+    {
+        _ReprVector::iterator it = std::find_if(
+            _reprs.begin(), _reprs.end(), _ReprComparator(reprToken));
+        if (it == _reprs.end()) {
+            _reprs.emplace_back(reprToken, HdReprSharedPtr());
+        }
+    }
+
+private:
+    static TfToken const &_PositionsToken()
+    {
+        static const TfToken token("positions");
+        return token;
+    }
+
+    static TfToken const &_OrientationsToken()
+    {
+        static const TfToken token("orientations");
+        return token;
+    }
+
+    static TfToken const &_ScalesToken()
+    {
+        static const TfToken token("scales");
+        return token;
+    }
+
+    static TfToken const &_OpacitiesToken()
+    {
+        static const TfToken token("opacities");
+        return token;
+    }
+
+    static TfToken const &_DegreeToken()
+    {
+        static const TfToken token("radiance:sphericalHarmonicsDegree");
+        return token;
+    }
+
+    static TfToken const &_CoefficientsToken()
+    {
+        static const TfToken token(
+            "radiance:sphericalHarmonicsCoefficients");
+        return token;
+    }
+
+    static TfToken const &_ProjectionModeHintToken()
+    {
+        static const TfToken token("projectionModeHint");
+        return token;
+    }
+
+    static TfToken const &_SortingModeHintToken()
+    {
+        static const TfToken token("sortingModeHint");
+        return token;
+    }
+
+    static val _FloatArrayView(std::vector<float> const &values)
+    {
+        return values.empty()
+            ? val::global("Float32Array").new_(0)
+            : val(typed_memory_view(values.size(), values.data()));
+    }
+
+    static std::string _GetTokenValue(
+        VtValue const &value, char const *fallback)
+    {
+        if (value.IsHolding<TfToken>()) {
+            return value.UncheckedGet<TfToken>().GetString();
+        }
+        if (value.IsHolding<std::string>()) {
+            return value.UncheckedGet<std::string>();
+        }
+        return fallback;
+    }
+
+    template <class ArrayT>
+    static void _CopyVec3Values(ArrayT const &values, std::vector<float> *out)
+    {
+        out->resize(values.size() * 3);
+        for (size_t i = 0; i < values.size(); ++i) {
+            (*out)[i * 3 + 0] = static_cast<float>(values[i][0]);
+            (*out)[i * 3 + 1] = static_cast<float>(values[i][1]);
+            (*out)[i * 3 + 2] = static_cast<float>(values[i][2]);
+        }
+    }
+
+    static void _CopyVec3Array(
+        VtValue const &value, std::vector<float> *out)
+    {
+        if (value.IsHolding<VtVec3fArray>()) {
+            _CopyVec3Values(value.UncheckedGet<VtVec3fArray>(), out);
+        } else if (value.IsHolding<VtVec3hArray>()) {
+            _CopyVec3Values(value.UncheckedGet<VtVec3hArray>(), out);
+        } else {
+            out->clear();
+        }
+    }
+
+    template <class ArrayT>
+    static void _CopyScalarValues(ArrayT const &values, std::vector<float> *out)
+    {
+        out->resize(values.size());
+        for (size_t i = 0; i < values.size(); ++i) {
+            (*out)[i] = static_cast<float>(values[i]);
+        }
+    }
+
+    static void _CopyScalarArray(
+        VtValue const &value, std::vector<float> *out)
+    {
+        if (value.IsHolding<VtFloatArray>()) {
+            _CopyScalarValues(value.UncheckedGet<VtFloatArray>(), out);
+        } else if (value.IsHolding<VtHalfArray>()) {
+            _CopyScalarValues(value.UncheckedGet<VtHalfArray>(), out);
+        } else {
+            out->clear();
+        }
+    }
+
+    template <class ArrayT>
+    static void _CopyQuatValues(ArrayT const &values, std::vector<float> *out)
+    {
+        out->resize(values.size() * 4);
+        for (size_t i = 0; i < values.size(); ++i) {
+            auto const imaginary = values[i].GetImaginary();
+            (*out)[i * 4 + 0] = static_cast<float>(imaginary[0]);
+            (*out)[i * 4 + 1] = static_cast<float>(imaginary[1]);
+            (*out)[i * 4 + 2] = static_cast<float>(imaginary[2]);
+            (*out)[i * 4 + 3] = static_cast<float>(values[i].GetReal());
+        }
+    }
+
+    static void _CopyQuatArray(
+        VtValue const &value, std::vector<float> *out)
+    {
+        if (value.IsHolding<VtQuatfArray>()) {
+            _CopyQuatValues(value.UncheckedGet<VtQuatfArray>(), out);
+        } else if (value.IsHolding<VtQuathArray>()) {
+            _CopyQuatValues(value.UncheckedGet<VtQuathArray>(), out);
+        } else {
+            out->clear();
+        }
+    }
+
+    emscripten::val *_renderDelegateInterface;
+    MainThreadJsVal _rPrim;
+    GfMatrix4f _transform = GfMatrix4f(1.0f);
+
+    Emscripten_ParticleField() = delete;
+    Emscripten_ParticleField(Emscripten_ParticleField const &) = delete;
+    Emscripten_ParticleField &operator=(
+        Emscripten_ParticleField const &) = delete;
+};
+
 class Emscripten_Material final : public HdMaterial {
 public:
     Emscripten_Material(SdfPath const& id, emscripten::val *renderDelegateInterface) :
@@ -2303,7 +2607,8 @@ private:
 const TfTokenVector WebRenderDelegate::SUPPORTED_RPRIM_TYPES =
 {
     HdPrimTypeTokens->mesh,
-    HdPrimTypeTokens->points
+    HdPrimTypeTokens->points,
+    HdPrimTypeTokens->particleField
 };
 
 const TfTokenVector WebRenderDelegate::SUPPORTED_SPRIM_TYPES =
@@ -2405,6 +2710,10 @@ HdRprim *
 WebRenderDelegate::CreateRprim(TfToken const& typeId,
                                     SdfPath const& rprimId)
 {
+    if (typeId == HdPrimTypeTokens->particleField) {
+        return new Emscripten_ParticleField(
+            rprimId, &_renderDelegateInterface);
+    }
     return new Emscripten_Rprim(typeId, rprimId, &_renderDelegateInterface);
 }
 

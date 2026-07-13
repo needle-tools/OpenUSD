@@ -144,6 +144,15 @@ void UsdImagingParticleFieldAdapter::TrackVariability(
         UsdImagingTokens->usdVaryingPrimvar,
         timeVaryingBits, false);
 
+    _IsVarying(prim, UsdVolTokens->projectionModeHint,
+        HdChangeTracker::DirtyPrimvar,
+        UsdImagingTokens->usdVaryingPrimvar,
+        timeVaryingBits, false);
+    _IsVarying(prim, UsdVolTokens->sortingModeHint,
+        HdChangeTracker::DirtyPrimvar,
+        UsdImagingTokens->usdVaryingPrimvar,
+        timeVaryingBits, false);
+
     BaseAdapter::TrackVariability(
         prim, cachePath, timeVaryingBits, instancerContext);
 }
@@ -264,7 +273,9 @@ UsdImagingParticleFieldAdapter::ProcessPropertyChange(
         propertyName == UsdVolTokens->opacitiesh ||
         propertyName == UsdVolTokens->radianceSphericalHarmonicsDegree ||
         propertyName == UsdVolTokens->radianceSphericalHarmonicsCoefficients ||
-        propertyName == UsdVolTokens->radianceSphericalHarmonicsCoefficientsh) {
+        propertyName == UsdVolTokens->radianceSphericalHarmonicsCoefficientsh ||
+        propertyName == UsdVolTokens->projectionModeHint ||
+        propertyName == UsdVolTokens->sortingModeHint) {
         return HdChangeTracker::DirtyPrimvar;
     }
 
