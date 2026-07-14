@@ -62,6 +62,16 @@ arch -x86_64 /usr/local/bin/python3 build_scripts/build_usd.py \
   --no-python-docs
 ```
 
+Launch that build with the isolated RenderMan environment using:
+
+```sh
+usdview-prman scene.usd
+```
+
+`usdview-prman` resolves to `herbst/usdview-prman.sh`. It intentionally removes
+the inherited arm64 Adobe glTF plugin path; use the regular arm64 `usdview` when
+that file-format plugin is required.
+
 The upstream OpenUSD 26.05 wasm target builds and runs the `wasmFetchResolver` sample, but it does not produce the viewer's `emHdBindings.*` artifacts.
 
 The current porting path keeps the three.js Hydra architecture by reintroducing a modernized wasm Hydra bridge on top of OpenUSD 26.05.
