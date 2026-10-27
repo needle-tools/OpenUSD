@@ -41,6 +41,8 @@ public:
 
     void SetStage(UsdStageRefPtr const &stage) { _stage = stage; }
     UsdStageRefPtr const &GetStage() const { return _stage; }
+    void SetTime(UsdTimeCode time) { _time = time; }
+    UsdTimeCode GetTime() const { return _time; }
     void TrackMdlMaterial(SdfPath const &id, bool timeVarying) {
         std::lock_guard<std::mutex> lock(_mdlMaterialMutex);
         _mdlMaterials[id] = timeVarying;
@@ -127,6 +129,7 @@ private:
 
     emscripten::val _renderDelegateInterface;
     UsdStageRefPtr _stage;
+    UsdTimeCode _time = UsdTimeCode::Default();
     mutable std::mutex _mdlMaterialMutex;
     std::map<SdfPath, bool> _mdlMaterials;
 };
