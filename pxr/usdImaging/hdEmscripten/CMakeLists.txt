@@ -255,10 +255,13 @@ set(HD_EMSCRIPTEN_NATIVE_PLUGIN_LIBS "")
 if(PXR_BUILD_DRACO_PLUGIN)
     list(APPEND HD_EMSCRIPTEN_NATIVE_PLUGIN_LIBS
         "$<LINK_LIBRARY:WHOLE_ARCHIVE,$<TARGET_FILE:usdDraco>>"
-        # Whole-archiving the file does not propagate the plugin target's
-        # dependencies. Native Draco must also link without the Adobe plugin.
-        "${DRACO_LIBRARY}"
     )
+    # Whole-archiving a file does not propagate its target dependencies. The
+    # Adobe Draco configuration already supplies this archive; repeating it
+    # around that whole-archive group creates a CMake static-link cycle.
+    if(NOT PXR_HD_EMSCRIPTEN_GLTF_PLUGIN_PREFIX OR NOT PXR_HD_EMSCRIPTEN_GLTF_DRACO)
+        list(APPEND HD_EMSCRIPTEN_NATIVE_PLUGIN_LIBS "${DRACO_LIBRARY}")
+    endif()
 endif()
 
 add_executable(${BINDINGS_NAME}
