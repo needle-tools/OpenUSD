@@ -10,6 +10,9 @@ EMSDK_DIR="${EMSDK_DIR:-/Users/herbst/git/emsdk}"
 
 OPENUSD_NATIVE_PREFIX="${OPENUSD_NATIVE_PREFIX:-/Users/herbst/OpenUSD-26.11-native}"
 OPENUSD_WASM_PREFIX="${OPENUSD_WASM_PREFIX:-/Users/herbst/OpenUSD-26.11-wasm}"
+# Standalone TBB/OpenSubdiv dependencies may be reused across USD releases.
+# Keep this separate from the install prefix for the new USD ABI.
+OPENUSD_WASM_DEPENDENCIES_PREFIX="${OPENUSD_WASM_DEPENDENCIES_PREFIX:-${OPENUSD_WASM_PREFIX}}"
 OPENUSD_WASM_HYDRA_BUILD_DIR="${OPENUSD_WASM_HYDRA_BUILD_DIR:-/Users/herbst/OpenUSD-26.11-wasm-hydra-exp-build}"
 OPENUSD_WASM_HYDRA_PREFIX="${OPENUSD_WASM_HYDRA_PREFIX:-/Users/herbst/OpenUSD-26.11-wasm-hydra-exp}"
 OPENUSD_WASM_HYDRA_MTLX_BUILD_DIR="${OPENUSD_WASM_HYDRA_MTLX_BUILD_DIR:-/Users/herbst/OpenUSD-26.11-wasm-hydra-mtlx-probe-build}"
@@ -19,7 +22,8 @@ MATERIALX_WASM_OPENUSD_BUILD_DIR="${MATERIALX_WASM_OPENUSD_BUILD_DIR:-/Users/her
 MATERIALX_WASM_OPENUSD_PREFIX="${MATERIALX_WASM_OPENUSD_PREFIX:-/Users/herbst/MaterialX-1.39.5-wasm-openusd}"
 ADOBE_PLUGIN_REPO="${ADOBE_PLUGIN_REPO:-/Users/herbst/git/USD-Fileformat-plugins}"
 ADOBE_PLUGIN_PREFIX="${ADOBE_PLUGIN_PREFIX:-/Users/herbst/USD-Fileformat-plugins-2026.03-openusd-26.11}"
-ADOBE_PLUGIN_WASM_PREFIX="${ADOBE_PLUGIN_WASM_PREFIX:-/Users/herbst/USD-Fileformat-plugins-2026.03-wasm-probe}"
+ADOBE_PLUGIN_WASM_PREFIX="${ADOBE_PLUGIN_WASM_PREFIX:-/Users/herbst/USD-Fileformat-plugins-2026.03-wasm-openusd-26.11}"
+DRACO_WASM_PREFIX="${DRACO_WASM_PREFIX:-${ADOBE_PLUGIN_WASM_PREFIX}}"
 
 export PATH="${CMAKE_BIN_DIR}:${PATH}"
 

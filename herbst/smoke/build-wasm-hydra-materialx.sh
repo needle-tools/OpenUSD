@@ -9,11 +9,11 @@ activate_emsdk
 
 cmake --build "${OPENUSD_WASM_HYDRA_MTLX_BUILD_DIR}" \
   --target emHdBindings \
-  --parallel "${JOBS:-8}"
+  --parallel "${JOBS:-2}"
 
 cmake --build "${OPENUSD_WASM_HYDRA_MTLX_BUILD_DIR}" \
   --target install \
-  --parallel "${JOBS:-8}"
+  --parallel "${JOBS:-2}"
 
 OPENUSD_WASM_HYDRA_PREFIX="${OPENUSD_WASM_HYDRA_MTLX_PREFIX}" \
   "${SCRIPT_DIR}/wasm-hydra-bindings-node.sh"
