@@ -183,6 +183,9 @@ public:
         if (!_stage || !_delegate || !_geometryPass) {
             return;
         }
+        // Hydra may pass a scene-index adapter, not our UsdImagingDelegate,
+        // to material Sync. Carry the actual draw time explicitly across it.
+        _renderDelegate.SetTime(_delegate->GetTime());
         {
             _HdEmscriptenSyncTimer updatesTimer(
                 "UsdImagingDelegate::ApplyPendingUpdates");
