@@ -1763,7 +1763,7 @@ HdRenderIndex::SyncAll(HdTaskSharedPtrVector *tasks,
     // an Update call; run this before legacy Hydra prim sync.
     //
 
-HD_EMSCRIPTEN_RENDER_INDEX_TIMER("HdRenderIndex::SyncAll renderDelegate Update");
+    HD_EMSCRIPTEN_RENDER_INDEX_TIMER("HdRenderIndex::SyncAll renderDelegate Update");
     _renderDelegate->Update();
 
     //
