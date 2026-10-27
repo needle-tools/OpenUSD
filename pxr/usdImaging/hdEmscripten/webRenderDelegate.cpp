@@ -1412,14 +1412,6 @@ private:
             std::string("_UpdateGeomSubsetMaterials ") + GetId().GetString());
         SdfPath const& id = GetId();
         SdfPath const materialId = delegate->GetMaterialId(id);
-        if (!materialId.IsEmpty()) {
-            _rPrim.With([&](val& rPrim) {
-                rPrim.call<void>("setGeomSubsetMaterial", val::array());
-                rPrim.call<void>("setMaterial", materialId.GetAsString());
-            });
-            return;
-        }
-
         std::map<int, std::string> coarseFaceMaterials;
         for (HdGeomSubset const& geomSubset : _topology.GetGeomSubsets()) {
             if (geomSubset.materialId.IsEmpty()) {
@@ -1429,6 +1421,16 @@ private:
             for (int faceIndex : geomSubset.indices) {
                 coarseFaceMaterials[faceIndex] = material;
             }
+        }
+
+        // A mesh binding supplies faces without a subset binding; it must not
+        // suppress the more specific materialBind subsets.
+        if (coarseFaceMaterials.empty()) {
+            _rPrim.With([&](val& rPrim) {
+                rPrim.call<void>("setGeomSubsetMaterial", val::array());
+                rPrim.call<void>("setMaterial", materialId.GetAsString());
+            });
+            return;
         }
 
         std::vector<Section> sections;
@@ -1449,21 +1451,20 @@ private:
                 HdMeshUtil::DecodeFaceIndexFromCoarseFaceParam(
                     _trianglePrimitiveParams[triIndex]);
             auto const materialIt = coarseFaceMaterials.find(coarseFace);
-            if (materialIt == coarseFaceMaterials.end()) {
-                flushSection();
-                continue;
-            }
+            const std::string faceMaterial =
+                materialIt == coarseFaceMaterials.end()
+                    ? materialId.GetString() : materialIt->second;
 
             const int start = static_cast<int>(triIndex * 3);
             if (currentLength > 0 &&
-                currentMaterial == materialIt->second &&
+                currentMaterial == faceMaterial &&
                 currentStart + currentLength == start) {
                 currentLength += 3;
             } else {
                 flushSection();
                 currentStart = start;
                 currentLength = 3;
-                currentMaterial = materialIt->second;
+                currentMaterial = faceMaterial;
             }
         }
         flushSection();
