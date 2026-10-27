@@ -255,6 +255,9 @@ set(HD_EMSCRIPTEN_NATIVE_PLUGIN_LIBS "")
 if(PXR_BUILD_DRACO_PLUGIN)
     list(APPEND HD_EMSCRIPTEN_NATIVE_PLUGIN_LIBS
         "$<LINK_LIBRARY:WHOLE_ARCHIVE,$<TARGET_FILE:usdDraco>>"
+        # Whole-archiving the file does not propagate the plugin target's
+        # dependencies. Native Draco must also link without the Adobe plugin.
+        "${DRACO_LIBRARY}"
     )
 endif()
 
