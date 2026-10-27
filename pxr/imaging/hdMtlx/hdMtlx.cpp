@@ -259,9 +259,15 @@ _GetMxInputType(
 {
     // If given, use the usdTypeName to get the materialX input type
     if (!usdTypeName.IsEmpty()) {
-        return _ConvertToMtlxType(usdTypeName);
+        const std::string mappedType = _ConvertToMtlxType(usdTypeName);
+        if (!mappedType.empty()) {
+            return mappedType;
+        }
     }
 
+    // USD role types such as vector3f may not have a table entry. Preserve
+    // the nodedef's canonical type instead of passing an empty type to
+    // setInputValue<string>, which would incorrectly create a string input.
     // Otherwise look to the nodedef to get the input type
     std::string mxInputType;
     mx::InputPtr mxInput = mxNodeDef->getActiveInput(mxInputName);

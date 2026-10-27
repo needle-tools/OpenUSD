@@ -2,6 +2,7 @@
 #define PXR_USD_IMAGING_USD_IMAGING_EMSCRIPTEN_RENDER_DELEGATE_H
 
 #include "pxr/pxr.h"
+#include "pxr/usd/usd/stage.h"
 #include "pxr/imaging/hd/renderDelegate.h"
 #include "pxr/imaging/hd/instancer.h"
 #include "pxr/imaging/hd/mesh.h"
@@ -21,6 +22,8 @@
 #include <emscripten/bind.h>
 #include <emscripten/threading.h>
 #include <functional>
+#include <map>
+#include <mutex>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -35,6 +38,21 @@ public:
 
     };
     virtual ~WebRenderDelegate() = default;
+
+    void SetStage(UsdStageRefPtr const &stage) { _stage = stage; }
+    UsdStageRefPtr const &GetStage() const { return _stage; }
+    void TrackMdlMaterial(SdfPath const &id, bool timeVarying) {
+        std::lock_guard<std::mutex> lock(_mdlMaterialMutex);
+        _mdlMaterials[id] = timeVarying;
+    }
+    void ForgetMdlMaterial(SdfPath const &id) {
+        std::lock_guard<std::mutex> lock(_mdlMaterialMutex);
+        _mdlMaterials.erase(id);
+    }
+    std::map<SdfPath, bool> GetMdlMaterials() const {
+        std::lock_guard<std::mutex> lock(_mdlMaterialMutex);
+        return _mdlMaterials;
+    }
 
     virtual const TfTokenVector &GetSupportedRprimTypes() const override;
     virtual const TfTokenVector &GetSupportedSprimTypes() const override;
@@ -108,6 +126,9 @@ private:
                                 const WebRenderDelegate &) = delete;
 
     emscripten::val _renderDelegateInterface;
+    UsdStageRefPtr _stage;
+    mutable std::mutex _mdlMaterialMutex;
+    std::map<SdfPath, bool> _mdlMaterials;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE
