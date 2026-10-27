@@ -50,8 +50,11 @@ class _ParticleWidthValueDataSource final
 public:
     HD_DECLARE_DATASOURCE(_ParticleWidthValueDataSource);
 
-    _ParticleWidthValueDataSource(const HdSampledDataSourceHandle& scalesInput)
+    _ParticleWidthValueDataSource(
+        const HdSampledDataSourceHandle& scalesInput,
+        const float widthScaleFactor)
     : _scalesInput(scalesInput)
+    , _widthScaleFactor(widthScaleFactor)
     {
     }
 
@@ -63,7 +66,8 @@ public:
             VtVec3fArray scales = value.UncheckedGet<VtVec3fArray>();
             VtFloatArray width(scales.size());
             for (size_t i = 0; i < width.size(); i++)
-                width[i] = (scales[i][0] + scales[i][1] + scales[i][2]) * 0.3333f;
+                width[i] = (scales[i][0] + scales[i][1] + scales[i][2])
+                    * (1.0f / 3.0f) * _widthScaleFactor;
             return width;
         }
         return VtFloatArray();
@@ -85,6 +89,7 @@ public:
 
 private:
     HdSampledDataSourceHandle _scalesInput;
+    float _widthScaleFactor;
 };
 
 class _ParticleWidthDataSource final : public HdContainerDataSource
@@ -92,8 +97,11 @@ class _ParticleWidthDataSource final : public HdContainerDataSource
 public:
     HD_DECLARE_DATASOURCE(_ParticleWidthDataSource);
 
-    _ParticleWidthDataSource(const HdContainerDataSourceHandle& scalesInput)
+    _ParticleWidthDataSource(
+        const HdContainerDataSourceHandle& scalesInput,
+        const float widthScaleFactor)
     : _scalesInput(scalesInput)
+    , _widthScaleFactor(widthScaleFactor)
     {
     }
 
@@ -110,7 +118,8 @@ public:
         if (!_scalesInput) return nullptr;
         if (name == HdPrimvarSchemaTokens->primvarValue) {
             return _ParticleWidthValueDataSource::New(
-                HdSampledDataSource::Cast(_scalesInput->Get(name))
+                HdSampledDataSource::Cast(_scalesInput->Get(name)),
+                _widthScaleFactor
             );
         }
         return _scalesInput->Get(name);
@@ -118,6 +127,7 @@ public:
 
 private:
     HdContainerDataSourceHandle _scalesInput;
+    float _widthScaleFactor;
 };
 
 // Points DataSource. Convert positions data source to float typed points.
@@ -300,9 +310,11 @@ public:
 
     _ParticlePrimvarsDataSource(
         const HdContainerDataSourceHandle& input,
-        const HdSampledDataSourceHandle& constantWidth)
+        const HdSampledDataSourceHandle& constantWidth,
+        const float widthScaleFactor)
     : _input(input),
-      _constantWidth(constantWidth)
+      _constantWidth(constantWidth),
+      _widthScaleFactor(widthScaleFactor)
     {
     }
 
@@ -330,19 +342,28 @@ public:
     GetNames() override
     {
         if (!_input) return TfTokenVector();
-        TfTokenVector names = _input->GetNames();
+        TfTokenVector names;
+        names.reserve(_input->GetNames().size() + 16);
         int degree = 0;
-        for (TfToken& name : names) {
+        for (const TfToken& inputName : _input->GetNames()) {
             // Rename positions as points
-            if (name == UsdVolTokens->positions) {
-                name = HdTokens->points;
+            if (inputName == UsdVolTokens->positions) {
+                names.push_back(HdTokens->points);
             }
             // Replace spherical harmonics with seperated primvars.
             else if (
-                name == UsdVolTokens->radianceSphericalHarmonicsCoefficients
+                inputName == UsdVolTokens->radianceSphericalHarmonicsCoefficients
             ) {
-                name = HdsiParticleFieldConversionTokens->radianceSphericalHarmonicsCoefficients00;
+                names.push_back(
+                    HdsiParticleFieldConversionTokens->radianceSphericalHarmonicsCoefficients00);
                 degree = GetCoefficientsDegree();
+            }
+            // The degree is represented by which separated coefficient
+            // primvars are present; it is not a point-renderer primvar.
+            else if (
+                inputName != UsdVolTokens->radianceSphericalHarmonicsDegree
+            ) {
+                names.push_back(inputName);
             }
         }
         // Add additional seperated spherical harmonics as needed by the degree.
@@ -408,7 +429,8 @@ public:
             // Otherwise average our scales if they exist
             else if (HdContainerDataSourceHandle scales 
                 = HdContainerDataSource::Cast(_input->Get(UsdVolTokens->scales))) {
-                return _ParticleWidthDataSource::New(scales);
+                return _ParticleWidthDataSource::New(
+                    scales, _widthScaleFactor);
             }
             // Otherwise set all points size to 1.0
             else {
@@ -523,6 +545,7 @@ public:
 private:
     HdContainerDataSourceHandle _input;
     HdSampledDataSourceHandle _constantWidth;
+    float _widthScaleFactor;
 };
 
 class _ParticlePrimDataSource final : public HdContainerDataSource
@@ -532,9 +555,11 @@ public:
 
     _ParticlePrimDataSource(
         const HdContainerDataSourceHandle& input,
-        const HdSampledDataSourceHandle& constantWidth)
+        const HdSampledDataSourceHandle& constantWidth,
+        const float widthScaleFactor)
     : _input(input),
-      _constantWidth(constantWidth)
+      _constantWidth(constantWidth),
+      _widthScaleFactor(widthScaleFactor)
     {
     }
 
@@ -552,7 +577,8 @@ public:
         HdDataSourceBaseHandle result = _input->Get(name);
         if (name == HdPrimvarsSchema::GetSchemaToken()) {
             return _ParticlePrimvarsDataSource::New(
-                HdContainerDataSource::Cast(result), _constantWidth
+                HdContainerDataSource::Cast(result), _constantWidth,
+                _widthScaleFactor
             );
         }
         return result;
@@ -561,6 +587,7 @@ public:
 private:
     HdContainerDataSourceHandle _input;
     HdSampledDataSourceHandle _constantWidth;
+    float _widthScaleFactor;
 };
 
 /// Particle Conversion Scene Index
@@ -573,7 +600,21 @@ HdsiParticleFieldConversionSceneIndex::New(
     const HdContainerDataSourceHandle materialOverlay)
 {
     return TfCreateRefPtr(new HdsiParticleFieldConversionSceneIndex(
-        inputSceneIndex, constantWidth, geometryOverlay, materialOverlay
+        inputSceneIndex, constantWidth, 1.0f, geometryOverlay, materialOverlay
+    ));
+}
+
+HdsiParticleFieldConversionSceneIndexRefPtr
+HdsiParticleFieldConversionSceneIndex::New(
+    const HdSceneIndexBaseRefPtr& inputSceneIndex,
+    const HdSampledDataSourceHandle constantWidth,
+    const float widthScaleFactor,
+    const HdContainerDataSourceHandle geometryOverlay,
+    const HdContainerDataSourceHandle materialOverlay)
+{
+    return TfCreateRefPtr(new HdsiParticleFieldConversionSceneIndex(
+        inputSceneIndex, constantWidth, widthScaleFactor,
+        geometryOverlay, materialOverlay
     ));
 }
 
@@ -739,7 +780,8 @@ HdsiParticleFieldConversionSceneIndex::GetPrim(const SdfPath& primPath) const
             HdPrimTypeTokens->points,
             HdOverlayContainerDataSource::New(
                 _ParticlePrimDataSource::New(
-                    HdContainerDataSource::Cast(prim.dataSource), _constantWidth),
+                    HdContainerDataSource::Cast(prim.dataSource), _constantWidth,
+                    _widthScaleFactor),
                 HdRetainedContainerDataSource::New(
                     HdMaterialBindingsSchemaTokens->materialBindings, 
                     HdMaterialBindingsSchema::BuildRetained(1, purposes, materialBindingSources)
@@ -765,10 +807,12 @@ HdsiParticleFieldConversionSceneIndex::GetChildPrimPaths(const SdfPath& primPath
 HdsiParticleFieldConversionSceneIndex::HdsiParticleFieldConversionSceneIndex(
     const HdSceneIndexBaseRefPtr& inputSceneIndex,
     const HdSampledDataSourceHandle constantWidth, 
+    const float widthScaleFactor,
     const HdContainerDataSourceHandle geometryOverlay, 
     const HdContainerDataSourceHandle materialOverlay)
     : HdSingleInputFilteringSceneIndexBase(inputSceneIndex),
         _constantWidth(constantWidth),
+        _widthScaleFactor(widthScaleFactor),
         _geometryOverlay(geometryOverlay),
         _materialOverlay(materialOverlay)
 {

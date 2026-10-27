@@ -49,4 +49,37 @@ public:
 
 };
 
+// Test package resolver that handles packages nested inside
+// "foo.package[bar.subpackage[...]]".
+class _TestSubPackageResolver
+    : public ArPackageResolver
+{
+public:
+    virtual std::string Resolve(
+        const std::string& resolvedPackagePath,
+        const std::string& packagedPath) override
+    {
+        return "subpackage_resolved_" + packagedPath;
+    }
+
+    virtual std::shared_ptr<ArAsset> OpenAsset(
+        const std::string& resolvedPackagePath,
+        const std::string& resolvedPackagedPath) override
+    {
+        return nullptr;
+    }
+
+    virtual void BeginCacheScope(
+        VtValue* cacheScopeData) override
+    {
+    }
+
+    virtual void EndCacheScope(
+        VtValue* cacheScopeData) override
+    {
+    }
+
+};
+
 AR_DEFINE_PACKAGE_RESOLVER(_TestPackageResolver, ArPackageResolver);
+AR_DEFINE_PACKAGE_RESOLVER(_TestSubPackageResolver, ArPackageResolver);

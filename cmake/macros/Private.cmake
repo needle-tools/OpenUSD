@@ -324,7 +324,11 @@ function(_install_resource_files NAME pluginInstallPrefix pluginToLibraryPath)
             set(resourceFile "${plugInfoFile}")
             set(emscriptenResourceFile ${resourceFile})
         else()
-            set(emscriptenResourceFile "${CMAKE_CURRENT_SOURCE_DIR}/${resourceFile}")
+            if(IS_ABSOLUTE "${resourceFile}")
+                set(emscriptenResourceFile "${resourceFile}")
+            else()
+                set(emscriptenResourceFile "${CMAKE_CURRENT_SOURCE_DIR}/${resourceFile}")
+            endif()
         endif()
 
         set(installDestination ${resourcesPath})
@@ -339,6 +343,13 @@ function(_install_resource_files NAME pluginInstallPrefix pluginToLibraryPath)
             if(NOT "${dirPath}" STREQUAL "")
                 set(resourceDestDir "${resourceDestDir}/${dirPath}")
             endif()
+
+            set(emscriptenResourceArg "--preload-file ${emscriptenResourceFile}@${resourceDestDir}/${destFileName}")
+            set_property(
+                TARGET ${NAME}
+                APPEND
+                PROPERTY EMSCRIPTEN_RESOURCES "${emscriptenResourceArg}"
+            )
 
             # Resources that are required for this library will be embedded in
             # the final Wasm output. For building internal binaries, we can use

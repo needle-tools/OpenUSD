@@ -61,6 +61,16 @@ public:
         const HdContainerDataSourceHandle geometryOverlay, 
         const HdContainerDataSourceHandle materialOverlay);
 
+    // As above, with a factor applied to widths derived from particle scales.
+    // The factor has no effect when constantWidth is provided.
+    HDSI_API
+    static HdsiParticleFieldConversionSceneIndexRefPtr
+    New(const HdSceneIndexBaseRefPtr& inputSceneIndex,
+        const HdSampledDataSourceHandle constantWidth,
+        const float widthScaleFactor,
+        const HdContainerDataSourceHandle geometryOverlay,
+        const HdContainerDataSourceHandle materialOverlay);
+
     HDSI_API
     virtual HdSceneIndexPrim GetPrim(const SdfPath& primPath) const;
 
@@ -69,11 +79,13 @@ public:
 
 protected:
     HdSampledDataSourceHandle _constantWidth;
+    float _widthScaleFactor;
     HdContainerDataSourceHandle _geometryOverlay, _materialOverlay;
 
     HdsiParticleFieldConversionSceneIndex(
         const HdSceneIndexBaseRefPtr& inputSceneIndex,
         const HdSampledDataSourceHandle constantWidth, 
+        const float widthScaleFactor,
         const HdContainerDataSourceHandle geometryOverlay, 
         const HdContainerDataSourceHandle materialOverlay);
 

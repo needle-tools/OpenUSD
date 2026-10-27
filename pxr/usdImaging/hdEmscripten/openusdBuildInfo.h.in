@@ -1,0 +1,5 @@
+#pragma once
+
+static constexpr char kHdEmscriptenOpenUsdBuildInfoJson[] = R"HDUSDINFO(
+@HD_EMSCRIPTEN_BUILD_INFO_JSON@
+)HDUSDINFO";
