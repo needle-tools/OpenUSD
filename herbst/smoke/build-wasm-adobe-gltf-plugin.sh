@@ -7,7 +7,15 @@ source "${SCRIPT_DIR}/env.sh"
 
 activate_emsdk
 
-rm -rf "${ADOBE_PLUGIN_WASM_PREFIX}-build" "${ADOBE_PLUGIN_WASM_PREFIX}"
+# Preserve incremental products. Use a version-specific prefix when USD's ABI
+# changes, and configure only against that version's installed headers.
+dependency_source_args=(-DUSD_FILEFORMATS_FETCH_DRACO=ON)
+if [[ -n "${DRACO_SOURCE_DIR:-}" ]]; then
+  dependency_source_args+=("-DFETCHCONTENT_SOURCE_DIR_DRACO=${DRACO_SOURCE_DIR}")
+fi
+if [[ -n "${TINYGLTF_SOURCE_DIR:-}" ]]; then
+  dependency_source_args+=("-DFETCHCONTENT_SOURCE_DIR_TINYGLTF=${TINYGLTF_SOURCE_DIR}")
+fi
 
 emcmake cmake \
   -S "${ADOBE_PLUGIN_REPO}" \
@@ -17,12 +25,12 @@ emcmake cmake \
   -Dpxr_ROOT="${OPENUSD_WASM_PREFIX}" \
   -Dpxr_DIR="${OPENUSD_WASM_PREFIX}" \
   -DCMAKE_PREFIX_PATH="${OPENUSD_WASM_PREFIX}" \
-  -DCMAKE_FIND_ROOT_PATH="${OPENUSD_WASM_PREFIX}" \
+  -DCMAKE_FIND_ROOT_PATH="${OPENUSD_WASM_PREFIX};${OPENUSD_WASM_DEPENDENCIES_PREFIX}" \
   -DPXR_FIND_TBB_IN_CONFIG=OFF \
-  -DTBB_INCLUDE_DIRS="${OPENUSD_WASM_PREFIX}/include" \
-  -DTBB_tbb_LIBRARY_RELEASE="${OPENUSD_WASM_PREFIX}/lib/libtbb.a" \
-  -DTBB_tbbmalloc_LIBRARY_RELEASE="${OPENUSD_WASM_PREFIX}/lib/libtbbmalloc.a" \
-  -DZLIB_ROOT="${OPENUSD_WASM_PREFIX}" \
+  -DTBB_INCLUDE_DIRS="${OPENUSD_WASM_DEPENDENCIES_PREFIX}/include" \
+  -DTBB_tbb_LIBRARY_RELEASE="${OPENUSD_WASM_DEPENDENCIES_PREFIX}/lib/libtbb.a" \
+  -DTBB_tbbmalloc_LIBRARY_RELEASE="${OPENUSD_WASM_DEPENDENCIES_PREFIX}/lib/libtbbmalloc.a" \
+  -DZLIB_ROOT="${OPENUSD_WASM_DEPENDENCIES_PREFIX}" \
   -DUSD_FILEFORMATS_BUILD_TESTS=OFF \
   -DUSD_FILEFORMATS_ENABLE_FBX=OFF \
   -DUSD_FILEFORMATS_ENABLE_GLTF=ON \
@@ -32,7 +40,7 @@ emcmake cmake \
   -DUSD_FILEFORMATS_ENABLE_STL=OFF \
   -DUSD_FILEFORMATS_ENABLE_SBSAR=OFF \
   -DUSD_FILEFORMATS_ENABLE_DRACO=ON \
-  -DUSD_FILEFORMATS_FETCH_DRACO=ON \
+  "${dependency_source_args[@]}" \
   -DDRACO_JS_GLUE=OFF \
   -DUSD_FILEFORMATS_ENABLE_OPENIMAGEIO=OFF \
   -DUSD_FILEFORMATS_FETCH_TINYGLTF=ON \
@@ -44,7 +52,7 @@ emcmake cmake \
 cmake --build "${ADOBE_PLUGIN_WASM_PREFIX}-build" \
   --config Release \
   --target usdGltf \
-  --parallel "${BUILD_PARALLELISM:-8}"
+  --parallel "${BUILD_PARALLELISM:-2}"
 
 mkdir -p \
   "${ADOBE_PLUGIN_WASM_PREFIX}/include" \

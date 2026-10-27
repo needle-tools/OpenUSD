@@ -13,8 +13,11 @@ if [[ ! -d "${MATERIALX_WASM_OPENUSD_PREFIX}" ]]; then
   exit 1
 fi
 
-gltf_plugin_args=()
-if [[ -d "${ADOBE_PLUGIN_WASM_PREFIX}" ]]; then
+gltf_plugin_args=(
+  -DPXR_HD_EMSCRIPTEN_GLTF_PLUGIN_PREFIX=
+  -DPXR_HD_EMSCRIPTEN_GLTF_DRACO=OFF
+)
+if [[ "${ENABLE_GLTF_PLUGIN:-1}" == "1" && -f "${ADOBE_PLUGIN_WASM_PREFIX}/lib/libusdGltf.a" ]]; then
   gltf_plugin_args=(
     -DPXR_HD_EMSCRIPTEN_GLTF_PLUGIN_PREFIX="${ADOBE_PLUGIN_WASM_PREFIX}"
     -DPXR_HD_EMSCRIPTEN_GLTF_DRACO=ON
@@ -35,7 +38,8 @@ git_dirty() {
 
 emscripten_version="$(emcc --version | sed -n '1p')"
 
-rm -rf "${OPENUSD_WASM_HYDRA_MTLX_BUILD_DIR}" "${OPENUSD_WASM_HYDRA_MTLX_PREFIX}"
+# Reconfiguration must retain incremental build products. Use a separate tree
+# for a new USD ABI; do not delete an existing install as a configuration step.
 
 emcmake cmake \
   -S "${OPENUSD_ROOT}" \
@@ -66,9 +70,9 @@ emcmake cmake \
   -DPXR_BUILD_PRMAN_PLUGIN=OFF \
   -DPXR_BUILD_ALEMBIC_PLUGIN=OFF \
   -DPXR_BUILD_DRACO_PLUGIN=ON \
-  -DDRACO_ROOT="${ADOBE_PLUGIN_WASM_PREFIX}" \
-  -DDRACO_INCLUDES="${ADOBE_PLUGIN_WASM_PREFIX}/include" \
-  -DDRACO_LIBRARY="${ADOBE_PLUGIN_WASM_PREFIX}/lib/libdraco.a" \
+  -DDRACO_ROOT="${DRACO_WASM_PREFIX}" \
+  -DDRACO_INCLUDES="${DRACO_WASM_PREFIX}/include" \
+  -DDRACO_LIBRARY="${DRACO_WASM_PREFIX}/lib/libdraco.a" \
   -DBUILD_SHARED_LIBS=OFF \
   -DCMAKE_PREFIX_PATH="${MATERIALX_WASM_OPENUSD_PREFIX}" \
   -DMaterialX_DIR="${MATERIALX_WASM_OPENUSD_PREFIX}/lib/cmake/MaterialX" \
@@ -80,14 +84,14 @@ emcmake cmake \
   -DPXR_HD_EMSCRIPTEN_EMSDK_SHA="$(git_sha "${EMSDK_DIR}")" \
   -DHD_EMSCRIPTEN_EMSDK_DIRTY="$(git_dirty "${EMSDK_DIR}")" \
   -DMATERIALX_STDLIB_DIR="${MATERIALX_WASM_OPENUSD_PREFIX}/libraries" \
-  -DCMAKE_FIND_ROOT_PATH="${OPENUSD_WASM_PREFIX};${MATERIALX_WASM_OPENUSD_PREFIX}" \
-  -DOpenSubdiv_DIR="${OPENUSD_WASM_PREFIX}/lib/cmake/OpenSubdiv" \
-  -DTBB_INCLUDE_DIRS="${OPENUSD_WASM_PREFIX}/include" \
-  -DTBB_tbb_LIBRARY_RELEASE="${OPENUSD_WASM_PREFIX}/lib/libtbb.a" \
-  -DTBB_tbbmalloc_LIBRARY_RELEASE="${OPENUSD_WASM_PREFIX}/lib/libtbbmalloc.a" \
-  -DOPENSUBDIV_INCLUDE_DIR="${OPENUSD_WASM_PREFIX}/include" \
-  -DOPENSUBDIV_OSDCPU_LIBRARY="${OPENUSD_WASM_PREFIX}/lib/libosdCPU.a" \
-  -DOPENSUBDIV_OSDGPU_LIBRARY="${OPENUSD_WASM_PREFIX}/lib/libosdGPU.a" \
+  -DCMAKE_FIND_ROOT_PATH="${OPENUSD_WASM_DEPENDENCIES_PREFIX};${MATERIALX_WASM_OPENUSD_PREFIX}" \
+  -DOpenSubdiv_DIR="${OPENUSD_WASM_DEPENDENCIES_PREFIX}/lib/cmake/OpenSubdiv" \
+  -DTBB_INCLUDE_DIRS="${OPENUSD_WASM_DEPENDENCIES_PREFIX}/include" \
+  -DTBB_tbb_LIBRARY_RELEASE="${OPENUSD_WASM_DEPENDENCIES_PREFIX}/lib/libtbb.a" \
+  -DTBB_tbbmalloc_LIBRARY_RELEASE="${OPENUSD_WASM_DEPENDENCIES_PREFIX}/lib/libtbbmalloc.a" \
+  -DOPENSUBDIV_INCLUDE_DIR="${OPENUSD_WASM_DEPENDENCIES_PREFIX}/include" \
+  -DOPENSUBDIV_OSDCPU_LIBRARY="${OPENUSD_WASM_DEPENDENCIES_PREFIX}/lib/libosdCPU.a" \
+  -DOPENSUBDIV_OSDGPU_LIBRARY="${OPENUSD_WASM_DEPENDENCIES_PREFIX}/lib/libosdGPU.a" \
   -DCMAKE_CXX_FLAGS="-pthread --use-port=zlib" \
   -DCMAKE_C_FLAGS="-pthread --use-port=zlib" \
   -DCMAKE_EXE_LINKER_FLAGS="-pthread"
