@@ -23,7 +23,6 @@
 //
 #include "webRenderDelegate.h"
 #include "webMdlMaterial.h"
-#include "pxr/usdImaging/usdImaging/delegate.h"
 #include "pxr/usdImaging/usdImaging/materialParamUtils.h"
 #include "pxr/base/gf/vec2f.h"
 #include "pxr/base/vt/typeHeaders.h"
@@ -2283,11 +2282,10 @@ public:
       // The Hydra material builder needs Sdr definitions. MDL source assets
       // generally have none in this runtime, so preserve authored values before
       // requesting the conventional material network.
-      const auto *usdDelegate = dynamic_cast<UsdImagingDelegate *>(sceneDelegate);
       _renderDelegate->ForgetMdlMaterial(GetId());
       const VtDictionary mdlMaterial = HdEmscriptenGetMdlMaterial(
           _renderDelegate->GetStage(), GetId(),
-          usdDelegate ? usdDelegate->GetTime() : UsdTimeCode::Default(),
+          _renderDelegate->GetTime(),
           _renderDelegate->GetMaterialRenderContexts());
       if (!mdlMaterial.empty()) {
           const UsdShadeMaterial material(_renderDelegate->GetStage()->GetPrimAtPath(GetId()));
@@ -2334,7 +2332,7 @@ public:
               contexts.erase(std::remove(contexts.begin(), contexts.end(), TfToken("mdl")), contexts.end());
               hdNetworkMap.map.clear();
               hdNetworkMap.terminals.clear();
-              const UsdTimeCode time = usdDelegate ? usdDelegate->GetTime() : UsdTimeCode::Default();
+              const UsdTimeCode time = _renderDelegate->GetTime();
               ArResolverContextBinder binder(_renderDelegate->GetStage()->GetPathResolverContext());
               UsdImagingBuildHdMaterialNetworkFromTerminal(
                   preview.GetPrim(), HdMaterialTerminalTokens->surface,
