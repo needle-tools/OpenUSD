@@ -1,0 +1,249 @@
+{
+  "classes": [
+    {
+      "cppType": "pxr::SdfLayer",
+      "jsName": "Layer",
+      "tsName": "USDLayer",
+      "methods": [
+        { "jsName": "GetIdentifier", "tsReturn": "string", "op": "direct", "cpp": "&pxr::SdfLayer::GetIdentifier" },
+        { "jsName": "GetDisplayName", "tsReturn": "string", "op": "direct", "cpp": "&pxr::SdfLayer::GetDisplayName" },
+        { "jsName": "GetRealPath", "tsReturn": "string", "op": "layerGetRealPath" },
+        { "jsName": "ExportToString", "tsReturn": "string", "op": "layerExportToString" },
+        { "jsName": "Export", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "boolean", "op": "layerExport" },
+        { "jsName": "Save", "tsReturn": "boolean", "op": "layerSave" }
+      ]
+    },
+    {
+      "cppType": "pxr::UsdAttribute",
+      "jsName": "Attribute",
+      "tsName": "USDAttribute",
+      "methods": [
+        { "jsName": "IsValid", "tsReturn": "boolean", "op": "boolOperator" },
+        { "jsName": "GetName", "tsReturn": "string", "op": "tokenString", "cpp": "GetName" },
+        { "jsName": "GetPath", "tsReturn": "string", "op": "pathString", "cpp": "GetPath" },
+        { "jsName": "GetTypeName", "tsReturn": "string", "op": "attributeTypeName" },
+        { "jsName": "GetAllMetadata", "tsReturn": "Record<string, string>", "op": "objectGetAllMetadata" },
+        { "jsName": "GetMetadataString", "tsArgs": [{ "name": "key", "type": "string" }], "tsReturn": "string", "op": "objectGetMetadataString" },
+        { "jsName": "HasAuthoredMetadata", "tsArgs": [{ "name": "key", "type": "string" }], "tsReturn": "boolean", "op": "objectHasAuthoredMetadata" },
+        { "jsName": "GetValueString", "tsReturn": "string", "op": "attributeValueString" },
+        { "jsName": "GetValueStringAtTime", "tsArgs": [{ "name": "timeCode", "type": "number" }], "tsReturn": "string", "op": "attributeValueStringAtTime" },
+        { "jsName": "GetConnections", "tsReturn": "StringVector", "op": "attributeConnections" },
+        { "jsName": "GetResolveInfo", "tsArgs": [{ "name": "timeCode", "type": "number" }], "tsReturn": "USDResolveInfo", "op": "attributeResolveInfo" },
+        { "jsName": "HasAuthoredValue", "tsReturn": "boolean", "op": "attributeHasAuthoredValue" },
+        { "jsName": "HasAuthoredValueOpinion", "tsReturn": "boolean", "op": "attributeHasAuthoredValueOpinion" },
+        { "jsName": "GetNumTimeSamples", "tsReturn": "number", "op": "attributeGetNumTimeSamples" },
+        { "jsName": "GetTimeSamples", "tsReturn": "DoubleVector", "op": "attributeGetTimeSamples" },
+        { "jsName": "GetPropertyStack", "tsArgs": [{ "name": "timeCode", "type": "number" }], "tsReturn": "USDSpecStack", "op": "propertyStack" },
+        { "jsName": "GetPropertyStackWithLayerOffsets", "tsArgs": [{ "name": "timeCode", "type": "number" }], "tsReturn": "USDSpecStack", "op": "propertyStackWithLayerOffsets" },
+        { "jsName": "SetBool", "tsArgs": [{ "name": "value", "type": "boolean" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetBool" },
+        { "jsName": "SetInt", "tsArgs": [{ "name": "value", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetInt" },
+        { "jsName": "SetFloat", "tsArgs": [{ "name": "value", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetFloat" },
+        { "jsName": "SetDouble", "tsArgs": [{ "name": "value", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetDouble" },
+        { "jsName": "SetString", "tsArgs": [{ "name": "value", "type": "string" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetString" },
+        { "jsName": "SetToken", "tsArgs": [{ "name": "value", "type": "string" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetToken" },
+        { "jsName": "Set", "tsArgs": [{ "name": "value", "type": "unknown" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetVal" },
+        { "jsName": "AddConnection", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "boolean", "op": "attributeAddConnection" },
+        { "jsName": "SetColor3f", "tsArgs": [{ "name": "r", "type": "number" }, { "name": "g", "type": "number" }, { "name": "b", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetColor3f" },
+        { "jsName": "SetVec3f", "tsArgs": [{ "name": "x", "type": "number" }, { "name": "y", "type": "number" }, { "name": "z", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetVec3f" },
+        { "jsName": "SetVec3d", "tsArgs": [{ "name": "x", "type": "number" }, { "name": "y", "type": "number" }, { "name": "z", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetVec3d" },
+        { "jsName": "SetMatrix4d", "tsArgs": [{ "name": "m00", "type": "number" }, { "name": "m01", "type": "number" }, { "name": "m02", "type": "number" }, { "name": "m03", "type": "number" }, { "name": "m10", "type": "number" }, { "name": "m11", "type": "number" }, { "name": "m12", "type": "number" }, { "name": "m13", "type": "number" }, { "name": "m20", "type": "number" }, { "name": "m21", "type": "number" }, { "name": "m22", "type": "number" }, { "name": "m23", "type": "number" }, { "name": "m30", "type": "number" }, { "name": "m31", "type": "number" }, { "name": "m32", "type": "number" }, { "name": "m33", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetMatrix4d" }
+      ]
+    },
+    {
+      "cppType": "pxr::UsdRelationship",
+      "jsName": "Relationship",
+      "tsName": "USDRelationship",
+      "methods": [
+        { "jsName": "IsValid", "tsReturn": "boolean", "op": "boolOperator" },
+        { "jsName": "GetName", "tsReturn": "string", "op": "tokenString", "cpp": "GetName" },
+        { "jsName": "GetPath", "tsReturn": "string", "op": "pathString", "cpp": "GetPath" },
+        { "jsName": "GetAllMetadata", "tsReturn": "Record<string, string>", "op": "objectGetAllMetadata" },
+        { "jsName": "GetMetadataString", "tsArgs": [{ "name": "key", "type": "string" }], "tsReturn": "string", "op": "objectGetMetadataString" },
+        { "jsName": "HasAuthoredMetadata", "tsArgs": [{ "name": "key", "type": "string" }], "tsReturn": "boolean", "op": "objectHasAuthoredMetadata" },
+        { "jsName": "GetPropertyStack", "tsArgs": [{ "name": "timeCode", "type": "number" }], "tsReturn": "USDSpecStack", "op": "propertyStack" },
+        { "jsName": "GetPropertyStackWithLayerOffsets", "tsArgs": [{ "name": "timeCode", "type": "number" }], "tsReturn": "USDSpecStack", "op": "propertyStackWithLayerOffsets" },
+        { "jsName": "GetTargets", "tsReturn": "StringVector", "op": "relationshipTargets" },
+        { "jsName": "AddTarget", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "boolean", "op": "relationshipAddTarget" },
+        { "jsName": "ClearTargets", "tsArgs": [{ "name": "removeSpec", "type": "boolean" }], "tsReturn": "boolean", "op": "relationshipClearTargets" }
+      ]
+    },
+    {
+      "cppType": "pxr::UsdPrim",
+      "jsName": "Prim",
+      "tsName": "USDPrim",
+      "methods": [
+        { "jsName": "IsValid", "tsReturn": "boolean", "op": "boolOperator" },
+        { "jsName": "GetName", "tsReturn": "string", "op": "tokenString", "cpp": "GetName" },
+        { "jsName": "GetPath", "tsReturn": "string", "op": "pathString", "cpp": "GetPath" },
+        { "jsName": "GetTypeName", "tsReturn": "string", "op": "tokenString", "cpp": "GetTypeName" },
+        { "jsName": "GetDisplayName", "tsReturn": "string", "op": "primGetDisplayName" },
+        { "jsName": "GetAllMetadata", "tsReturn": "Record<string, string>", "op": "objectGetAllMetadata" },
+        { "jsName": "GetMetadataString", "tsArgs": [{ "name": "key", "type": "string" }], "tsReturn": "string", "op": "objectGetMetadataString" },
+        { "jsName": "HasAuthoredMetadata", "tsArgs": [{ "name": "key", "type": "string" }], "tsReturn": "boolean", "op": "objectHasAuthoredMetadata" },
+        { "jsName": "GetSpecifier", "tsReturn": "string", "op": "primGetSpecifier" },
+        { "jsName": "IsActive", "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::IsActive" },
+        { "jsName": "SetActive", "tsArgs": [{ "name": "active", "type": "boolean" }], "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::SetActive" },
+        { "jsName": "ApplyAPI", "tsArgs": [{ "name": "schemaIdentifier", "type": "string" }], "tsReturn": "boolean", "op": "primApplyAPI" },
+        { "jsName": "IsDefined", "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::IsDefined" },
+        { "jsName": "IsAbstract", "tsReturn": "boolean", "op": "primIsAbstract" },
+        { "jsName": "IsInstance", "tsReturn": "boolean", "op": "primIsInstance" },
+        { "jsName": "IsInPrototype", "tsReturn": "boolean", "op": "primIsInPrototype" },
+        { "jsName": "IsPrototype", "tsReturn": "boolean", "op": "primIsPrototype" },
+        { "jsName": "IsLoaded", "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::IsLoaded" },
+        { "jsName": "HasAuthoredPayloads", "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::HasAuthoredPayloads" },
+        { "jsName": "HasAuthoredReferences", "tsReturn": "boolean", "op": "primHasAuthoredReferences" },
+        { "jsName": "HasAuthoredInherits", "tsReturn": "boolean", "op": "primHasAuthoredInherits" },
+        { "jsName": "HasAuthoredSpecializes", "tsReturn": "boolean", "op": "primHasAuthoredSpecializes" },
+        { "jsName": "HasAuthoredInstanceable", "tsReturn": "boolean", "op": "primHasAuthoredInstanceable" },
+        { "jsName": "Load", "tsReturn": "void", "tsMayAsync": true, "op": "primLoad" },
+        { "jsName": "Unload", "tsReturn": "void", "tsMayAsync": true, "op": "primUnload" },
+        { "jsName": "AddPayload", "tsArgs": [{ "name": "assetPath", "type": "string" }, { "name": "primPath", "type": "string" }], "tsReturn": "boolean", "op": "primAddPayload" },
+        { "jsName": "GetParent", "tsReturn": "USDPrim", "op": "direct", "cpp": "&pxr::UsdPrim::GetParent" },
+        { "jsName": "GetChildren", "tsReturn": "USDPrimVector", "op": "primChildren" },
+        { "jsName": "GetAttributes", "tsReturn": "USDAttributeVector", "op": "primGetAttributes" },
+        { "jsName": "GetRelationships", "tsReturn": "USDRelationshipVector", "op": "primGetRelationships" },
+        { "jsName": "GetPropertyNames", "tsReturn": "StringVector", "op": "tokenVectorString", "cpp": "GetPropertyNames" },
+        { "jsName": "GetPrimStack", "tsReturn": "USDSpecStack", "op": "primPrimStack" },
+        { "jsName": "GetPrimStackWithLayerOffsets", "tsReturn": "USDSpecStack", "op": "primPrimStackWithLayerOffsets" },
+        { "jsName": "GetPrimIndex", "tsReturn": "USDPrimIndex", "op": "primGetPrimIndex" },
+        { "jsName": "GetCompositionArcs", "tsReturn": "USDCompositionArc[]", "op": "primGetCompositionArcs" },
+        { "jsName": "GetAttribute", "tsArgs": [{ "name": "name", "type": "string" }], "tsReturn": "USDAttribute", "op": "primGetAttribute" },
+        { "jsName": "CreateAttribute", "tsArgs": [{ "name": "name", "type": "string" }, { "name": "typeName", "type": "string" }, { "name": "custom", "type": "boolean" }], "tsReturn": "USDAttribute", "op": "primCreateAttribute" },
+        { "jsName": "GetRelationship", "tsArgs": [{ "name": "name", "type": "string" }], "tsReturn": "USDRelationship", "op": "primGetRelationship" },
+        { "jsName": "CreateRelationship", "tsArgs": [{ "name": "name", "type": "string" }, { "name": "custom", "type": "boolean" }], "tsReturn": "USDRelationship", "op": "primCreateRelationship" },
+        { "jsName": "AddVariant", "tsArgs": [{ "name": "variantSetName", "type": "string" }, { "name": "variantName", "type": "string" }], "tsReturn": "boolean", "op": "primAddVariant" },
+        { "jsName": "SetVariantSelection", "tsArgs": [{ "name": "variantSetName", "type": "string" }, { "name": "variantName", "type": "string" }], "tsReturn": "boolean", "tsMayAsync": true, "op": "primSetVariantSelection" },
+        { "jsName": "GetVariantSelection", "tsArgs": [{ "name": "variantSetName", "type": "string" }], "tsReturn": "string", "op": "primGetVariantSelection" },
+        { "jsName": "ClearVariantSelection", "tsArgs": [{ "name": "variantSetName", "type": "string" }], "tsReturn": "boolean", "op": "primClearVariantSelection" },
+        { "jsName": "BlockVariantSelection", "tsArgs": [{ "name": "variantSetName", "type": "string" }], "tsReturn": "boolean", "op": "primBlockVariantSelection" },
+        { "jsName": "GetVariantSetNames", "tsReturn": "StringVector", "op": "primGetVariantSetNames" },
+        { "jsName": "GetVariantNames", "tsArgs": [{ "name": "variantSetName", "type": "string" }], "tsReturn": "StringVector", "op": "primGetVariantNames" },
+        { "jsName": "DefinePrimInVariant", "tsArgs": [{ "name": "variantSetName", "type": "string" }, { "name": "variantName", "type": "string" }, { "name": "path", "type": "string" }, { "name": "typeName", "type": "string" }], "tsReturn": "USDPrim", "op": "primDefinePrimInVariant" }
+      ]
+    },
+    {
+      "cppType": "pxr::UsdStage",
+      "jsName": "Stage",
+      "tsName": "USDStage",
+      "methods": [
+        { "jsName": "GetRootLayer", "tsReturn": "USDLayer", "op": "stageRootLayerPointer" },
+        { "jsName": "GetPseudoRoot", "tsReturn": "USDPrim", "op": "direct", "cpp": "&pxr::UsdStage::GetPseudoRoot" },
+        { "jsName": "GetPrimAtPath", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "USDPrim", "op": "stageGetPrimAtPath" },
+        { "jsName": "DefinePrim", "tsArgs": [{ "name": "path", "type": "string" }, { "name": "typeName", "type": "string" }], "tsReturn": "USDPrim", "op": "stageDefinePrim" },
+        { "jsName": "Traverse", "tsReturn": "USDPrimVector", "op": "stageTraverse" },
+        { "jsName": "TraverseAll", "tsReturn": "USDPrimVector", "op": "stageTraverseAll" },
+        { "jsName": "GetLayerStack", "tsArgs": [{ "name": "includeSessionLayers", "type": "boolean" }], "tsReturn": "USDLayerInfo[]", "op": "stageGetLayerStack" },
+        { "jsName": "GetUsedLayers", "tsArgs": [{ "name": "includeClipLayers", "type": "boolean" }], "tsReturn": "USDLayerInfo[]", "op": "stageGetUsedLayers" },
+        { "jsName": "GetCompositionErrors", "tsReturn": "string[]", "op": "stageGetCompositionErrors" },
+        { "jsName": "RegisterObjectsChanged", "tsArgs": [{ "name": "callback", "type": "(notice: USDObjectsChangedNotice) => void" }], "tsReturn": "number", "op": "stageRegisterObjectsChanged" },
+        { "jsName": "RevokeObjectsChanged", "tsArgs": [{ "name": "listenerId", "type": "number" }], "tsReturn": "boolean", "op": "stageRevokeObjectsChanged" },
+        { "jsName": "GetStartTimeCode", "tsReturn": "number", "op": "direct", "cpp": "&pxr::UsdStage::GetStartTimeCode" },
+        { "jsName": "GetEndTimeCode", "tsReturn": "number", "op": "direct", "cpp": "&pxr::UsdStage::GetEndTimeCode" },
+        { "jsName": "GetTimeCodesPerSecond", "tsReturn": "number", "op": "direct", "cpp": "&pxr::UsdStage::GetTimeCodesPerSecond" },
+        { "jsName": "SetStartTimeCode", "tsArgs": [{ "name": "timeCode", "type": "number" }], "tsReturn": "void", "op": "direct", "cpp": "&pxr::UsdStage::SetStartTimeCode" },
+        { "jsName": "SetEndTimeCode", "tsArgs": [{ "name": "timeCode", "type": "number" }], "tsReturn": "void", "op": "direct", "cpp": "&pxr::UsdStage::SetEndTimeCode" },
+        { "jsName": "SetTimeCodesPerSecond", "tsArgs": [{ "name": "timeCodesPerSecond", "type": "number" }], "tsReturn": "void", "op": "direct", "cpp": "&pxr::UsdStage::SetTimeCodesPerSecond" },
+        { "jsName": "GetUpAxis", "tsReturn": "number", "op": "stageUpAxis" },
+        { "jsName": "SetUpAxis", "tsArgs": [{ "name": "upAxis", "type": "string" }], "tsReturn": "boolean", "op": "stageSetUpAxis" },
+        { "jsName": "Export", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "boolean", "op": "stageExport" },
+        { "jsName": "ExportToString", "tsReturn": "string", "op": "stageExportToString" }
+      ]
+    }
+  ],
+  "schemas": [
+    {
+      "cppType": "pxr::UsdGeomXform",
+      "jsName": "UsdGeomXform",
+      "tsName": "UsdGeomXform",
+      "extraMethods": ["AddTranslateOp", "AddRotateXYZOp", "AddScaleOp", "AddTransformOp"]
+    },
+    {
+      "cppType": "pxr::UsdGeomScope",
+      "jsName": "UsdGeomScope",
+      "tsName": "UsdGeomScope"
+    },
+    {
+      "cppType": "pxr::UsdGeomSphere",
+      "jsName": "UsdGeomSphere",
+      "tsName": "UsdGeomSphere",
+      "extraMethods": ["AddTranslateOp", "AddRotateXYZOp", "AddScaleOp", "AddTransformOp", "MakeVisible", "MakeInvisible"],
+      "attributes": [
+        { "name": "Radius" },
+        { "name": "DisplayColor" },
+        { "name": "Purpose" }
+      ]
+    },
+    {
+      "cppType": "pxr::UsdGeomCube",
+      "jsName": "UsdGeomCube",
+      "tsName": "UsdGeomCube",
+      "extraMethods": ["AddTranslateOp", "AddRotateXYZOp", "AddScaleOp", "AddTransformOp", "MakeVisible", "MakeInvisible"],
+      "attributes": [
+        { "name": "Size" },
+        { "name": "DisplayColor" },
+        { "name": "Purpose" }
+      ]
+    },
+    {
+      "cppType": "pxr::UsdGeomMesh",
+      "jsName": "UsdGeomMesh",
+      "tsName": "UsdGeomMesh",
+      "extraMethods": ["AddTranslateOp", "AddRotateXYZOp", "AddScaleOp", "AddTransformOp", "MakeVisible", "MakeInvisible"],
+      "attributes": [
+        { "name": "Points" },
+        { "name": "FaceVertexCounts" },
+        { "name": "FaceVertexIndices" },
+        { "name": "DisplayColor" },
+        { "name": "Purpose" }
+      ]
+    },
+    {
+      "cppType": "pxr::UsdGeomCamera",
+      "jsName": "UsdGeomCamera",
+      "tsName": "UsdGeomCamera",
+      "extraMethods": ["AddTranslateOp", "AddRotateXYZOp", "AddScaleOp", "AddTransformOp", "MakeVisible", "MakeInvisible"],
+      "attributes": [
+        { "name": "FocalLength" },
+        { "name": "FocusDistance" }
+      ]
+    },
+    {
+      "cppType": "pxr::UsdShadeMaterial",
+      "jsName": "UsdShadeMaterial",
+      "tsName": "UsdShadeMaterial",
+      "methods": [
+        { "jsName": "CreateSurfaceOutput", "tsArgs": [{ "name": "renderContext", "type": "string" }], "tsReturn": "UsdShadeOutput", "cpp": "emscripten::optional_override([](pxr::UsdShadeMaterial const& material, std::string const& renderContext) { return material.CreateSurfaceOutput(pxr::TfToken(renderContext)); })" }
+      ]
+    },
+    {
+      "cppType": "pxr::UsdShadeShader",
+      "jsName": "UsdShadeShader",
+      "tsName": "UsdShadeShader",
+      "attributes": [
+        { "name": "Id" }
+      ],
+      "methods": [
+        { "jsName": "CreateInput", "tsArgs": [{ "name": "name", "type": "string" }, { "name": "typeName", "type": "string" }], "tsReturn": "UsdShadeInput", "cpp": "emscripten::optional_override([](pxr::UsdShadeShader& shader, std::string const& name, std::string const& typeName) { return shader.CreateInput(pxr::TfToken(name), pxr::hdEmscriptenGenerated::_FindValueTypeName(typeName)); })" },
+        { "jsName": "CreateOutput", "tsArgs": [{ "name": "name", "type": "string" }, { "name": "typeName", "type": "string" }], "tsReturn": "UsdShadeOutput", "cpp": "emscripten::optional_override([](pxr::UsdShadeShader& shader, std::string const& name, std::string const& typeName) { return shader.CreateOutput(pxr::TfToken(name), pxr::hdEmscriptenGenerated::_FindValueTypeName(typeName)); })" }
+      ]
+    }
+  ],
+  "vectors": [
+    { "cppType": "int", "jsName": "VectorInt", "tsName": "IntVector", "elementType": "number" },
+    { "cppType": "float", "jsName": "VectorFloat", "tsName": "FloatVector", "elementType": "number" },
+    { "cppType": "double", "jsName": "VectorDouble", "tsName": "DoubleVector", "elementType": "number" },
+    { "cppType": "std::string", "jsName": "VectorString", "tsName": "StringVector", "elementType": "string" },
+    { "cppType": "pxr::GfVec3f", "jsName": "VectorVec3f", "tsName": "GfVec3fVector", "elementType": "GfVec3f" },
+    { "cppType": "pxr::GfVec3d", "jsName": "VectorVec3d", "tsName": "GfVec3dVector", "elementType": "GfVec3d" },
+    { "cppType": "pxr::UsdPrim", "jsName": "VectorPrim", "tsName": "USDPrimVector", "elementType": "USDPrim" },
+    { "cppType": "pxr::UsdAttribute", "jsName": "VectorAttribute", "tsName": "USDAttributeVector", "elementType": "USDAttribute" },
+    { "cppType": "pxr::UsdRelationship", "jsName": "VectorRelationship", "tsName": "USDRelationshipVector", "elementType": "USDRelationship" }
+  ],
+  "functions": [
+    { "jsName": "CreateStage", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "USDStage", "op": "createStage" },
+    { "jsName": "OpenStage", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "USDStage", "tsMayAsync": true, "op": "openStage" },
+    { "jsName": "ReleaseStage", "tsArgs": [{ "name": "stage", "type": "USDStage" }], "tsReturn": "boolean", "op": "releaseStage" },
+    { "jsName": "CreateUsdzPackage", "tsArgs": [{ "name": "assetPath", "type": "string" }, { "name": "usdzPath", "type": "string" }], "tsReturn": "boolean", "tsMayAsync": true, "op": "createUsdzPackage" },
+    { "jsName": "ReadFile", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "Uint8Array", "op": "readFile" }
+  ]
+}

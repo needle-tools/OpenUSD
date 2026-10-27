@@ -82,9 +82,11 @@ HdPrman_ParticleFieldConversionSceneIndexPlugin::_AppendSceneIndex(
     const HdContainerDataSourceHandle& inputArgs)
 {
 #ifdef HDPRMAN_USE_PARTICLE_FIELD_CONVERSION_SCENE_INDEX
-    /// Set a constant width of 5.6 to bound RenderMan's points within a gaussian falloff power of 2
-    static const HdRetainedTypedSampledDataSource<float>::Handle constantWidth =
-        HdRetainedTypedSampledDataSource<float>::New(5.6f);
+
+    // RenderMan's falloff power of 2 bounds the useful Gaussian support at
+    // approximately 5.6 times the authored scale-derived point width.
+    constexpr float widthScaleFactor = 5.6f;
+
 
     /// Overlay RenderMan geometry settings
     static const HdDataSourceBaseHandle values[] = {
@@ -178,10 +180,13 @@ HdPrman_ParticleFieldConversionSceneIndexPlugin::_AppendSceneIndex(
 
     static const HdContainerDataSourceHandle materialOverlay = HdRetainedContainerDataSource::New(HdMaterialSchema::GetSchemaToken(), materialDS);
 
-    return HdsiParticleFieldConversionSceneIndex::New(inputScene, constantWidth, geometryOverlay, materialOverlay);
+
+    return HdsiParticleFieldConversionSceneIndex::New(
+        inputScene, nullptr, widthScaleFactor, geometryOverlay, materialOverlay);
 #else
     return inputScene;
 #endif
+
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

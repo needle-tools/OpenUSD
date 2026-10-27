@@ -1331,9 +1331,7 @@ private:
     ArPackageResolver*
     _GetPackageResolver(const std::string& packageRelativePath) const
     {
-        const std::string innermostPackage = 
-            ArSplitPackageRelativePathInner(packageRelativePath).first;
-        const std::string format = GetExtension(innermostPackage);
+        const std::string format = GetExtension(packageRelativePath);
 
         for (size_t i = 0, e = _packageResolvers.size(); i != e; ++i) {
             if (_packageResolvers[i]->HandlesFormat(format)) {
