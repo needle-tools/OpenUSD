@@ -22,6 +22,9 @@
 // language governing permissions and limitations under the Apache License.
 //
 #include "webRenderDelegate.h"
+#include "webMdlMaterial.h"
+#include "pxr/usdImaging/usdImaging/delegate.h"
+#include "pxr/usdImaging/usdImaging/materialParamUtils.h"
 #include "pxr/base/gf/vec2f.h"
 #include "pxr/base/vt/typeHeaders.h"
 #include "pxr/imaging/hd/bufferArray.h"
@@ -282,6 +285,13 @@ emscripten::val _VtArrayToJsVal(VtArray<T> const &array)
 
 emscripten::val _VtValueToJsVal(VtValue const &value)
 {
+    if (value.IsHolding<VtDictionary>()) {
+        val object = val::object();
+        for (auto const &entry : value.UncheckedGet<VtDictionary>()) {
+            object.set(entry.first, _VtValueToJsVal(entry.second));
+        }
+        return object;
+    }
 #define HD_EMSCRIPTEN_CONVERT_SCALAR(T) \
     if (value.IsHolding<T>()) { \
         return _ValueToJsVal(value.UncheckedGet<T>()); \
@@ -2242,9 +2252,11 @@ private:
 
 class Emscripten_Material final : public HdMaterial {
 public:
-    Emscripten_Material(SdfPath const& id, emscripten::val *renderDelegateInterface) :
+    Emscripten_Material(SdfPath const& id, emscripten::val *renderDelegateInterface,
+                        WebRenderDelegate *renderDelegate) :
       HdMaterial(id)
      , _renderDelegateInterface(renderDelegateInterface)
+     , _renderDelegate(renderDelegate)
     {
       const std::string path = id.GetAsString();
       runInMainThread([this, path]() {
@@ -2255,6 +2267,7 @@ public:
 
     virtual ~Emscripten_Material() override {
       _limitSurfaceMaterialState.erase(GetId());
+      _renderDelegate->ForgetMdlMaterial(GetId());
     }
 
     virtual void Sync(HdSceneDelegate *sceneDelegate,
@@ -2265,6 +2278,35 @@ public:
           std::string("Emscripten_Material::Sync ") + GetId().GetString());
       if (*dirtyBits == HdMaterial::Clean) {
         return;
+      }
+
+      // The Hydra material builder needs Sdr definitions. MDL source assets
+      // generally have none in this runtime, so preserve authored values before
+      // requesting the conventional material network.
+      const auto *usdDelegate = dynamic_cast<UsdImagingDelegate *>(sceneDelegate);
+      _renderDelegate->ForgetMdlMaterial(GetId());
+      const VtDictionary mdlMaterial = HdEmscriptenGetMdlMaterial(
+          _renderDelegate->GetStage(), GetId(),
+          usdDelegate ? usdDelegate->GetTime() : UsdTimeCode::Default(),
+          _renderDelegate->GetMaterialRenderContexts());
+      if (!mdlMaterial.empty()) {
+          const UsdShadeMaterial material(_renderDelegate->GetStage()->GetPrimAtPath(GetId()));
+          const auto shader = material.ComputeSurfaceSource(_renderDelegate->GetMaterialRenderContexts());
+          _renderDelegate->TrackMdlMaterial(GetId(),
+              UsdImagingIsHdMaterialNetworkTimeVarying(shader.GetPrim()));
+          _limitSurfaceMaterialState[GetId()] = false;
+          _sPrim.With([&](val &sPrim) {
+              sPrim.call<val>("beginMaterialSync");
+              const val callback = sPrim["updateMdlMaterial"];
+              if (!callback.isUndefined() && !callback.isNull()) {
+                  sPrim.call<val>("updateMdlMaterial",
+                                 _VtValueToJsVal(VtValue(mdlMaterial)));
+              }
+              sPrim.call<val>("updateFinished", std::string("surface"),
+                             val::array());
+          });
+          *dirtyBits = HdMaterial::Clean;
+          return;
       }
 
       VtValue vtMat;
@@ -2278,8 +2320,32 @@ public:
         *dirtyBits = HdMaterial::Clean;
         return;
       }
-      HdMaterialNetworkMap const& hdNetworkMap =
+      HdMaterialNetworkMap hdNetworkMap =
           vtMat.UncheckedGet<HdMaterialNetworkMap>();
+      const UsdShadeMaterial usdMaterial(_renderDelegate->GetStage()
+          ? _renderDelegate->GetStage()->GetPrimAtPath(GetId()) : UsdPrim());
+      if (usdMaterial) {
+          TfTokenVector contexts = _renderDelegate->GetMaterialRenderContexts();
+          const auto preview = HdEmscriptenGetPreferredPreviewSurface(usdMaterial, contexts);
+          const auto selected = usdMaterial.ComputeSurfaceSource(contexts);
+          if (preview && selected && preview.GetPath() != selected.GetPath()) {
+              _renderDelegate->TrackMdlMaterial(GetId(),
+                  UsdImagingIsHdMaterialNetworkTimeVarying(preview.GetPrim()));
+              contexts.erase(std::remove(contexts.begin(), contexts.end(), TfToken("mdl")), contexts.end());
+              hdNetworkMap.map.clear();
+              hdNetworkMap.terminals.clear();
+              const UsdTimeCode time = usdDelegate ? usdDelegate->GetTime() : UsdTimeCode::Default();
+              ArResolverContextBinder binder(_renderDelegate->GetStage()->GetPathResolverContext());
+              UsdImagingBuildHdMaterialNetworkFromTerminal(
+                  preview.GetPrim(), HdMaterialTerminalTokens->surface,
+                  _renderDelegate->GetShaderSourceTypes(), contexts, &hdNetworkMap, time);
+              if (const auto displacement = usdMaterial.ComputeDisplacementSource(contexts)) {
+                  UsdImagingBuildHdMaterialNetworkFromTerminal(
+                      displacement.GetPrim(), HdMaterialTerminalTokens->displacement,
+                      _renderDelegate->GetShaderSourceTypes(), contexts, &hdNetworkMap, time);
+              }
+          }
+      }
       _limitSurfaceMaterialState[GetId()] =
           _HasLimitSurfaceEvaluation(hdNetworkMap.config);
 
@@ -2348,6 +2414,7 @@ public:
 
 private:
     emscripten::val *_renderDelegateInterface;
+    WebRenderDelegate *_renderDelegate;
     MainThreadJsVal _sPrim;
 
 #if HD_EMSCRIPTEN_HAS_MATERIALX
@@ -2668,6 +2735,7 @@ WebRenderDelegate::GetMaterialRenderContexts() const
 #if HD_EMSCRIPTEN_HAS_MATERIALX
         TfToken("mtlx"),
 #endif
+        TfToken("mdl"),
         TfToken()
     };
     return renderContexts;
@@ -2737,7 +2805,7 @@ WebRenderDelegate::CreateSprim(TfToken const& typeId,
     if (typeId == HdPrimTypeTokens->camera) {
         return new Emscripten_Camera(sprimId, &_renderDelegateInterface);
     } else if (typeId == HdPrimTypeTokens->material) {
-        return new Emscripten_Material(sprimId, &_renderDelegateInterface);
+        return new Emscripten_Material(sprimId, &_renderDelegateInterface, this);
     } else if (typeId == HdPrimTypeTokens->domeLight ||
                typeId == HdPrimTypeTokens->cylinderLight ||
                typeId == HdPrimTypeTokens->diskLight ||
@@ -2760,7 +2828,7 @@ WebRenderDelegate::CreateFallbackSprim(TfToken const& typeId)
     if (typeId == HdPrimTypeTokens->camera) {
         return new Emscripten_Camera(SdfPath::EmptyPath(), &_renderDelegateInterface);
     } else if (typeId == HdPrimTypeTokens->material) {
-        return new Emscripten_Material(SdfPath::EmptyPath(), &_renderDelegateInterface);
+        return new Emscripten_Material(SdfPath::EmptyPath(), &_renderDelegateInterface, this);
     } else if (typeId == HdPrimTypeTokens->domeLight ||
                typeId == HdPrimTypeTokens->cylinderLight ||
                typeId == HdPrimTypeTokens->diskLight ||

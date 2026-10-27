@@ -4,6 +4,9 @@
 /// \file usdImaging/emscripteTest/testdriver.h
 
 #include "pxr/pxr.h"
+#include "pxr/base/tf/weakBase.h"
+#include "pxr/usd/usd/notice.h"
+#include "pxr/imaging/hd/material.h"
 #include "pxr/usdImaging/usdImaging/delegate.h"
 
 #include "pxr/imaging/hd/changeTracker.h"
@@ -130,7 +133,7 @@ private:
 /// no images are produced.  It just syncs between Hydra and
 /// a Web Renderer.
 ///
-class HdWebSyncDriver final {
+class HdWebSyncDriver final : public TfWeakBase {
 public:
     HdWebSyncDriver(emscripten::val renderDelegateInterface,
                                     std::string const& usdFilePath)
@@ -170,6 +173,7 @@ public:
 
     ~HdWebSyncDriver()
     {
+        TfNotice::Revoke(_materialsNoticeKey);
         delete _delegate;
         delete _renderIndex;
     }
@@ -183,6 +187,20 @@ public:
             _HdEmscriptenSyncTimer updatesTimer(
                 "UsdImagingDelegate::ApplyPendingUpdates");
             _delegate->ApplyPendingUpdates();
+        }
+        // The legacy adapter does not track NodeGraph interface edits, and
+        // follows MDL variability even when we choose its paired PreviewSurface.
+        // Refresh only affected classes of MDL materials; ordinary MaterialX
+        // and PreviewSurface materials retain Hydra's normal variability path.
+        const bool materialEdits = _mdlMaterialsDirty.exchange(false);
+        const bool timeChanged = _mdlTimeDirty.exchange(false);
+        if (materialEdits || timeChanged) {
+            for (const auto &entry : _renderDelegate.GetMdlMaterials()) {
+                if (materialEdits || (timeChanged && entry.second)) {
+                    _renderIndex->GetChangeTracker().MarkSprimDirty(
+                        entry.first, HdMaterial::DirtyResource);
+                }
+            }
         }
         HdTaskSharedPtrVector tasks = {
             std::make_shared<WebSyncTask>(_geometryPass, _renderTags)
@@ -395,6 +413,7 @@ public:
             return;
         }
         _delegate->SetTime(time);
+        _mdlTimeDirty.store(true);
     }
 
     double GetTime() {
@@ -468,6 +487,27 @@ public:
     }
 
 private:
+    void _OnMaterialObjectsChanged(UsdNotice::ObjectsChanged const &notice,
+                                   UsdStageWeakPtr const &)
+    {
+        if (!notice.GetResyncedPaths().empty()) {
+            _mdlMaterialsDirty.store(true);
+            return;
+        }
+        for (const auto &path : notice.GetChangedInfoOnlyPaths()) {
+            const std::string name = path.GetName();
+            if (name.compare(0, 7, "inputs:") == 0 ||
+                name.compare(0, 8, "outputs:") == 0 ||
+                name.compare(0, 5, "info:") == 0) {
+                _mdlMaterialsDirty.store(true);
+                return;
+            }
+        }
+    }
+
+    TfNotice::Key _materialsNoticeKey;
+    std::atomic<bool> _mdlMaterialsDirty{false};
+    std::atomic<bool> _mdlTimeDirty{false};
     HdEngine _engine;
     WebRenderDelegate _renderDelegate;
     HdRenderIndex       *_renderIndex;
@@ -568,7 +608,11 @@ private:
             return;
         }
 
+        _renderDelegate.SetStage(_stage);
         UsdSkelBakeSkinning(_stage->Traverse());
+        TfNotice::Revoke(_materialsNoticeKey);
+        _materialsNoticeKey = TfNotice::Register(
+            TfCreateWeakPtr(this), &HdWebSyncDriver::_OnMaterialObjectsChanged, _stage);
         _delegate->Populate(_stage->GetPseudoRoot());
 
         _geometryPass = HdRenderPassSharedPtr(
