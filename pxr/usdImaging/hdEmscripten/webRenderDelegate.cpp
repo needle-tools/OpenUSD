@@ -2307,19 +2307,8 @@ public:
           return;
       }
 
-      VtValue vtMat;
-      {
-          _HdEmscriptenScopedTimer resourceTimer(
-              std::string("Emscripten_Material::GetMaterialResource ") +
-              GetId().GetString());
-          vtMat = sceneDelegate->GetMaterialResource(GetId());
-      }
-      if (!vtMat.IsHolding<HdMaterialNetworkMap>()) {
-        *dirtyBits = HdMaterial::Clean;
-        return;
-      }
-      HdMaterialNetworkMap hdNetworkMap =
-          vtMat.UncheckedGet<HdMaterialNetworkMap>();
+      HdMaterialNetworkMap hdNetworkMap;
+      bool builtPreferredPreview = false;
       const UsdShadeMaterial usdMaterial(_renderDelegate->GetStage()
           ? _renderDelegate->GetStage()->GetPrimAtPath(GetId()) : UsdPrim());
       if (usdMaterial) {
@@ -2330,8 +2319,6 @@ public:
               _renderDelegate->TrackMdlMaterial(GetId(),
                   UsdImagingIsHdMaterialNetworkTimeVarying(preview.GetPrim()));
               contexts.erase(std::remove(contexts.begin(), contexts.end(), TfToken("mdl")), contexts.end());
-              hdNetworkMap.map.clear();
-              hdNetworkMap.terminals.clear();
               const UsdTimeCode time = _renderDelegate->GetTime();
               ArResolverContextBinder binder(_renderDelegate->GetStage()->GetPathResolverContext());
               UsdImagingBuildHdMaterialNetworkFromTerminal(
@@ -2342,7 +2329,22 @@ public:
                       displacement.GetPrim(), HdMaterialTerminalTokens->displacement,
                       _renderDelegate->GetShaderSourceTypes(), contexts, &hdNetworkMap, time);
               }
+              // Match UsdImagingMaterialAdapter's config metadata extraction
+              // without asking it to build the unsupported MDL network first.
+              hdNetworkMap.config = HdEmscriptenGetMaterialConfig(usdMaterial);
+              builtPreferredPreview = true;
           }
+      }
+      if (!builtPreferredPreview) {
+          _HdEmscriptenScopedTimer resourceTimer(
+              std::string("Emscripten_Material::GetMaterialResource ") +
+              GetId().GetString());
+          const VtValue vtMat = sceneDelegate->GetMaterialResource(GetId());
+          if (!vtMat.IsHolding<HdMaterialNetworkMap>()) {
+              *dirtyBits = HdMaterial::Clean;
+              return;
+          }
+          hdNetworkMap = vtMat.UncheckedGet<HdMaterialNetworkMap>();
       }
       _limitSurfaceMaterialState[GetId()] =
           _HasLimitSurfaceEvaluation(hdNetworkMap.config);

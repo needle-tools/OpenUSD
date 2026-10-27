@@ -13,6 +13,27 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+// Match UsdImagingMaterialAdapter: strip the config namespace, preserve value
+// types and nested names, and read attributes at default time (not draw time).
+inline VtDictionary
+HdEmscriptenGetMaterialConfig(UsdShadeMaterial const &material)
+{
+    VtDictionary config;
+    const TfToken prefix("config:");
+    for (const auto &property : material.GetPrim().GetPropertiesInNamespace(prefix)) {
+        const auto attribute = property.As<UsdAttribute>();
+        if (!attribute) {
+            continue;
+        }
+        const auto name = SdfPath::StripPrefixNamespace(
+            attribute.GetName().GetString(), prefix);
+        VtValue value;
+        attribute.Get(&value);
+        config.insert({name.first, value});
+    }
+    return config;
+}
+
 // A real authored PreviewSurface is preferable to an MDL approximation.
 inline UsdShadeShader
 HdEmscriptenGetPreferredPreviewSurface(
