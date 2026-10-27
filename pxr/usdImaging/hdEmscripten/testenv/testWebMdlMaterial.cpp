@@ -19,6 +19,25 @@ int main()
     std::ofstream(directory / "texture.png") << "test asset";
     const auto stage = UsdStage::CreateNew((directory / "material.usda").string());
     const auto material = UsdShadeMaterial::Define(stage, SdfPath("/Material"));
+    // Config parity with the standard material adapter includes namespace
+    // stripping, typed values, default-time reads, and ignoring relationships.
+    const auto limitSurface = material.GetPrim().CreateAttribute(
+        TfToken("config:limitSurfaceEvaluation"), SdfValueTypeNames->Bool);
+    limitSurface.Set(true);
+    const auto label = material.GetPrim().CreateAttribute(
+        TfToken("config:label"), SdfValueTypeNames->String);
+    label.Set(std::string("default"));
+    label.Set(std::string("sampled"), UsdTimeCode(1));
+    material.GetPrim().CreateAttribute(TfToken("config:custom:quality"),
+        SdfValueTypeNames->Int).Set(3);
+    material.GetPrim().CreateRelationship(TfToken("config:ignoredRelationship"));
+    const VtDictionary expectedConfig = {
+        {"limitSurfaceEvaluation", VtValue(true)},
+        {"label", VtValue(std::string("default"))},
+        {"custom:quality", VtValue(3)}
+    };
+    assert(HdEmscriptenGetMaterialConfig(material) == expectedConfig);
+
     const auto graph = UsdShadeNodeGraph::Define(stage, SdfPath("/Material/Graph"));
     auto shader = UsdShadeShader::Define(stage, SdfPath("/Material/Graph/Shader"));
     shader.SetSourceAsset(SdfAssetPath("OmniPBR.mdl"), TfToken("mdl"));
@@ -97,5 +116,5 @@ int main()
     assert(read(1).empty());
     assert(!HdEmscriptenGetPreferredPreviewSurface(material, contexts));
     fs::remove_all(directory);
-    std::cout << "MDL authored extraction: interfaces, samples, assets, colorSpace, unsupported connections, and context preference passed\n";
+    std::cout << "MDL authored extraction: interfaces, samples, assets, colorSpace, unsupported connections, context preference, and config metadata parity passed\n";
 }
