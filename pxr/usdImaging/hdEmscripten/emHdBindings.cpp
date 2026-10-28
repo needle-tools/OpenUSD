@@ -82,6 +82,7 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
     .function("SetComplexity", &pxr::HdWebSyncDriver::SetComplexity)
     .function("getFile", &pxr::HdWebSyncDriver::getFile)
     .function("resolveAssetUrl", &pxr::HdWebSyncDriver::resolveAssetUrl)
+    .function("HasScopedHttpCache", &pxr::HdWebSyncDriver::HasScopedHttpCache)
     .function("HasStage", &pxr::HdWebSyncDriver::HasStage)
     .function("GetStage", optional_override([](pxr::HdWebSyncDriver& driver) {
       return get_pointer(driver.GetStage());

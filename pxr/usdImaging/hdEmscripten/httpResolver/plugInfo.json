@@ -4,7 +4,8 @@
         "Info": {
           "Types": {
             "HttpResolver": {
-              "bases": ["ArDefaultResolver"]
+              "bases": ["ArDefaultResolver"],
+              "implementsContexts": true
             }
           }
         },

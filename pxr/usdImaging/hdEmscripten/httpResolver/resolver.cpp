@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <vector>
+#include <atomic>
 
 // IMPORT LOCAL LIBRARIES
 #include "resolver.h"
@@ -181,14 +182,6 @@ void HttpResolver::saveBinaryAssetContentToFile(const char* assetContent, size_t
             std::cout << "Failed to open file for writing." << std::endl;
         }
     }
-}
-
-void HttpResolver::setBaseUrl(const std::string& url) const {
-    baseUrl = url;
-}
-
-void HttpResolver::setBaseTempDir(const std::string& tempDir) const {
-    baseTempDir = tempDir;
 }
 
 std::string correctURL(const std::string& url) {
@@ -369,133 +362,129 @@ std::string combineUrl(const std::string& baseUrl, const std::string& relativePa
     return scheme + domain + joinPathParts(parts);
 }
 
-ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
-    if (verbose){
-        std::cout << "_Resolve: " << assetPath << std::endl;
-    }
-    std::string stringAssetPathCopy = extractHttpUrl(assetPath);
-    std::filesystem::path savedAssetFilePath = assetPath;
-    if (std::filesystem::exists(assetPath)){
-        if (verbose) {
-            std::cout << "Already Exists: " << assetPath << std::endl;
-        }
-    }
-    else if (isHttpUrl(stringAssetPathCopy)) {
-        std::string githubName = "github.com";
-        std::string rawGithubName = "raw.githubusercontent.com";
-        std::string blob = "/blob";
-
-        size_t pos = stringAssetPathCopy.find(githubName);
-        if (pos!= std::string::npos) {
-            stringAssetPathCopy.replace(pos, githubName.length(), rawGithubName);
-        }
-
-        size_t pos_blob = stringAssetPathCopy.find(blob);
-        if (pos_blob!= std::string::npos) {
-            stringAssetPathCopy.erase(pos_blob, blob.length());
-        }
-
-        auto finalBaseUrl = getHttpDirectory(stringAssetPathCopy);
-        if (verbose){
-            std::cout << "http PATH: " << stringAssetPathCopy << std::endl;
-            std::cout << "finalBaseUrl: " << finalBaseUrl << std::endl;
-        }
-
-        setBaseUrl(finalBaseUrl);
-
-        std::filesystem::path tempDir = std::filesystem::temp_directory_path();
-        // This path is chosen because if an asset is found with the path /../../../ it will go up the tmp directory structure
-        // in the case of using /tmp/ then all relative paths greater than depth 1, will look the same. using 6 here is arbitrary,
-        // is there a way to make this always work?
-        setBaseTempDir(tempDir.generic_string() + "/1/1/1/1/1/1/");
-        auto filePath = baseTempDir + getHttpFilename(stringAssetPathCopy);
-        savedAssetFilePath = filePath;
-        resolvedRoutes[savedAssetFilePath.generic_string()] = stringAssetPathCopy;
-    }
-    else if (!baseUrl.empty()){
-        std::filesystem::path systemPath = stringAssetPathCopy;
-        std::filesystem::path tempRoot = std::filesystem::temp_directory_path() / "1";
-        if (!isPathInside(systemPath, tempRoot)) {
-            return ArDefaultResolver::_Resolve(assetPath);
-        }
-
-        std::filesystem::path relativePath = systemPath.lexically_relative(baseTempDir);
-        if (relativePath.empty()) {
-            return ArDefaultResolver::_Resolve(assetPath);
-        }
-
-        std::string route = combineUrl(baseUrl, relativePath);
-        if (verbose){
-            std::cout << "Relative Path before: " << relativePath << std::endl;
-        }
-
-        savedAssetFilePath = systemPath;
-        resolvedRoutes[savedAssetFilePath.generic_string()] = route;
-        if (verbose){
-            std::cout << "Assumed to exist now, trying from baseUrl: " << systemPath << std::endl;
-        }
-    }
-    else {
-        return ArDefaultResolver::_Resolve(assetPath);
-    }
-
-    if (verbose){
-        std::cout << "ENDDD_Resolve: " << savedAssetFilePath << std::endl;
-    }
-
-    return ArResolvedPath(savedAssetFilePath);
+HttpResolverCacheScope::~HttpResolverCacheScope() {
+    Release();
 }
 
-std::string HttpResolver::GetUrlForResolvedPath(const std::string& resolvedPath) const {
-    const auto routeIt = resolvedRoutes.find(resolvedPath);
-    if (routeIt != resolvedRoutes.end()) {
-        return routeIt->second;
-    }
+void HttpResolverCacheScope::Release() {
+    std::lock_guard<std::mutex> lock(mutex);
+    released = true;
+    directories.clear();
+    std::error_code error;
+    std::filesystem::remove_all(root, error);
+}
 
-    if (!baseUrl.empty() && !baseTempDir.empty()) {
-        const std::string tempRoot =
-            (std::filesystem::temp_directory_path() / "1").generic_string();
-        if (resolvedPath.rfind(tempRoot + "/", 0) == 0) {
-            const std::string relativePath =
-                lexicalRelativePath(resolvedPath, baseTempDir);
-            if (!relativePath.empty()) {
-                return combineUrl(baseUrl, relativePath);
+std::string HttpResolverCacheScope::ResolveUrl(const std::string& url) {
+    const std::string directory = getHttpDirectory(url);
+    std::lock_guard<std::mutex> lock(mutex);
+    if (released) return {};
+    auto it = directories.find(directory);
+    if (it == directories.end()) {
+        // Keep six levels for authored parent traversal, within this URL's
+        // namespace. Different absolute URL directories never share a cache.
+        const std::string path = root + "/url-" +
+            std::to_string(directories.size()) + "/1/1/1/1/1/1/";
+        it = directories.emplace(directory, path).first;
+    }
+    return it->second + getHttpFilename(url);
+}
+
+std::string HttpResolverCacheScope::GetUrl(const std::string& path) const {
+    std::lock_guard<std::mutex> lock(mutex);
+    for (const auto& entry : directories) {
+        const std::string& base = entry.second;
+        const std::string urlRoot = base.substr(0, base.size() - 12);
+        if (isPathInside(path, urlRoot)) {
+            return combineUrl(entry.first, lexicalRelativePath(path, base));
+        }
+    }
+    return {};
+}
+
+std::shared_ptr<HttpResolverCacheScope> HttpResolver::_NewScope() const {
+    static std::atomic<uint64_t> nextId{0};
+    const auto root = std::filesystem::temp_directory_path() /
+        "hdEmscripten-http" / std::to_string(++nextId);
+    auto scope = std::make_shared<HttpResolverCacheScope>(root.generic_string());
+    std::lock_guard<std::mutex> lock(_scopeMutex);
+    for (auto it = _scopes.begin(); it != _scopes.end();) {
+        if (it->second.expired()) it = _scopes.erase(it);
+        else ++it;
+    }
+    _scopes.emplace(scope->root, scope);
+    return scope;
+}
+
+ArResolverContext HttpResolver::CreateScopedContext(const std::string& assetPath) const {
+    return ArResolverContext(HttpResolverContext{_NewScope()},
+        ArDefaultResolver::_CreateDefaultContextForAsset(assetPath));
+}
+
+std::shared_ptr<HttpResolverCacheScope> HttpResolver::_CurrentScope() const {
+    if (const auto* context = _GetCurrentContextObject<HttpResolverContext>()) {
+        if (context->scope) return context->scope;
+    }
+    // Calls outside a stage context retain a module-lifetime cache. URL
+    // directories still have separate identities; driver-owned scopes do not
+    // use or delete this cache.
+    {
+        std::lock_guard<std::mutex> lock(_scopeMutex);
+        if (_unscoped) return _unscoped;
+    }
+    auto scope = _NewScope();
+    std::lock_guard<std::mutex> lock(_scopeMutex);
+    if (!_unscoped) _unscoped = scope;
+    return _unscoped;
+}
+
+bool HttpResolver::_IsContextDependentPath(const std::string& path) const {
+    return isHttpUrl(extractHttpUrl(path)) ||
+        ArDefaultResolver::_IsContextDependentPath(path);
+}
+
+ArResolvedPath HttpResolver::_Resolve(const std::string& assetPath) const {
+    std::string url = extractHttpUrl(assetPath);
+    if (isHttpUrl(url)) {
+        const std::string githubName = "github.com";
+        const auto github = url.find(githubName);
+        if (github != std::string::npos) {
+            url.replace(github, githubName.size(), "raw.githubusercontent.com");
+            const auto blob = url.find("/blob");
+            if (blob != std::string::npos) url.erase(blob, 5);
+        }
+        return ArResolvedPath(_CurrentScope()->ResolveUrl(url));
+    }
+    // Anchored paths carry their scope, even without a context bound on this
+    // thread (e.g. asynchronous texture requests). Never use another stage's
+    // most recently opened URL as their base.
+    if (!GetUrlForResolvedPath(assetPath).empty()) {
+        return ArResolvedPath(assetPath);
+    }
+    return ArDefaultResolver::_Resolve(assetPath);
+}
+
+std::string HttpResolver::GetUrlForResolvedPath(const std::string& path) const {
+    std::shared_ptr<HttpResolverCacheScope> scope;
+    {
+        std::lock_guard<std::mutex> lock(_scopeMutex);
+        for (const auto& entry : _scopes) {
+            if (isPathInside(path, entry.first)) {
+                scope = entry.second.lock();
+                break;
             }
         }
     }
-
-    return std::string();
+    return scope ? scope->GetUrl(path) : std::string();
 }
 
-std::shared_ptr<ArAsset> HttpResolver::_OpenAsset(const ArResolvedPath &resolvedPath) const {
-    if (verbose){
-        std::cout << "_OpenAsset: " << resolvedPath.GetPathString() << std::endl;
-    }
-
+std::shared_ptr<ArAsset> HttpResolver::_OpenAsset(const ArResolvedPath& resolvedPath) const {
     const std::string path = resolvedPath.GetPathString();
     if (!std::filesystem::exists(path)) {
-        std::string route;
-        const auto routeIt = resolvedRoutes.find(path);
-        if (routeIt != resolvedRoutes.end()) {
-            route = routeIt->second;
-        }
-        else if (!baseUrl.empty() && !baseTempDir.empty()) {
-            std::filesystem::path systemPath = path;
-            std::filesystem::path tempRoot = std::filesystem::temp_directory_path() / "1";
-            std::filesystem::path relativePath = systemPath.lexically_relative(baseTempDir);
-            if (isPathInside(systemPath, tempRoot) && !relativePath.empty()) {
-                route = combineUrl(baseUrl, relativePath.generic_string());
-                resolvedRoutes[path] = route;
-            }
-        }
-
-        if (!route.empty()) {
-            if (FetchAndSaveAsset(route, path).empty()) {
-                return nullptr;
-            }
+        const std::string route = GetUrlForResolvedPath(path);
+        if (!route.empty() && FetchAndSaveAsset(route, path).empty()) {
+            return nullptr;
         }
     }
-
     return ArDefaultResolver::_OpenAsset(resolvedPath);
 }
 
