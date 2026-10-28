@@ -32,6 +32,8 @@
 #include "pxr/imaging/hd/material.h"
 #include "pxr/imaging/hd/mesh.h"
 #include "pxr/imaging/hd/points.h"
+#include "pxr/imaging/hd/basisCurvesTopology.h"
+#include "pxr/usd/usdGeom/nurbsCurves.h"
 #include "pxr/imaging/hd/bprim.h"
 #include "pxr/imaging/hd/tokens.h"
 #include "pxr/imaging/hd/repr.h"
@@ -544,6 +546,8 @@ private:
         }
     }
 };
+
+#include "webStroke.h"
 
 class Emscripten_Rprim final : public HdMesh {
 public:
@@ -2678,6 +2682,7 @@ const TfTokenVector WebRenderDelegate::SUPPORTED_RPRIM_TYPES =
 {
     HdPrimTypeTokens->mesh,
     HdPrimTypeTokens->points,
+    HdPrimTypeTokens->basisCurves,
     HdPrimTypeTokens->particleField
 };
 
@@ -2781,6 +2786,9 @@ HdRprim *
 WebRenderDelegate::CreateRprim(TfToken const& typeId,
                                     SdfPath const& rprimId)
 {
+    if (typeId == HdPrimTypeTokens->points || typeId == HdPrimTypeTokens->basisCurves) {
+        return new Emscripten_Stroke(typeId, rprimId, &_renderDelegateInterface, this);
+    }
     if (typeId == HdPrimTypeTokens->particleField) {
         return new Emscripten_ParticleField(
             rprimId, &_renderDelegateInterface);
