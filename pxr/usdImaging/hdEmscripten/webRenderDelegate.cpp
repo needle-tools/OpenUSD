@@ -52,6 +52,7 @@
 #include "pxr/imaging/pxOsd/tokens.h"
 #include "pxr/usd/ar/resolver.h"
 #include "pxr/usd/sdf/assetPath.h"
+#include "pxr/usd/usdLux/blackbody.h"
 
 #include "pxr/base/gf/matrix4d.h"
 #include "pxr/base/gf/range1f.h"
@@ -2594,8 +2595,15 @@ public:
         const std::string path = id.GetAsString();
         const bool visible = sceneDelegate->GetVisible(id);
         GfMatrix4f transform(sceneDelegate->GetTransform(id));
-        const GfVec3f color = _GetVec3fParam(
+        GfVec3f color = _GetVec3fParam(
             sceneDelegate, id, HdLightTokens->color, GfVec3f(1.0f));
+        const VtValue temperatureEnabled = sceneDelegate->GetLightParamValue(
+            id, TfToken("enableColorTemperature"));
+        if (temperatureEnabled.IsHolding<bool>() && temperatureEnabled.UncheckedGet<bool>()) {
+            const GfVec3f temperature = UsdLuxBlackbodyTemperatureAsRgb(
+                _GetFloatParam(sceneDelegate, id, TfToken("colorTemperature"), 6500.0f));
+            for (int component = 0; component < 3; ++component) color[component] *= temperature[component];
+        }
         const float exposure = _GetFloatParam(
             sceneDelegate, id, HdLightTokens->exposure, 0.0f);
         const float intensity =
@@ -2626,6 +2634,20 @@ public:
             state.set("width", width);
             state.set("height", height);
             state.set("angle", angle);
+            const VtValue texture = sceneDelegate->GetLightParamValue(id, TfToken("texture:file"));
+            if (texture.IsHolding<SdfAssetPath>()) {
+                const SdfAssetPath asset = texture.UncheckedGet<SdfAssetPath>();
+                state.set("textureFile", asset.GetAssetPath());
+                state.set("textureResolvedPath", asset.GetResolvedPath());
+                state.set("textureResolvedUrl", _GetHttpResolvedUrl(asset.GetResolvedPath()));
+            }
+            const VtValue format = sceneDelegate->GetLightParamValue(id, TfToken("texture:format"));
+            if (format.IsHolding<TfToken>()) state.set("textureFormat", format.UncheckedGet<TfToken>().GetString());
+            const VtValue normalize = sceneDelegate->GetLightParamValue(id, TfToken("normalize"));
+            state.set("normalize", normalize.IsHolding<bool>() && normalize.UncheckedGet<bool>());
+            state.set("coneAngle", _GetFloatParam(sceneDelegate, id, TfToken("shaping:cone:angle"), 180.0f));
+            state.set("coneSoftness", _GetFloatParam(sceneDelegate, id, TfToken("shaping:cone:softness"), 0.0f));
+            state.set("focus", _GetFloatParam(sceneDelegate, id, TfToken("shaping:focus"), 0.0f));
             sPrim.call<void>("updateLightState", state);
         });
 
