@@ -174,7 +174,8 @@ struct UsdPhysicsSceneDesc : UsdPhysicsObjectDesc
 struct UsdPhysicsCollisionGroupDesc : UsdPhysicsObjectDesc
 {
     UsdPhysicsCollisionGroupDesc():
-        UsdPhysicsObjectDesc(UsdPhysicsObjectType::CollisionGroup)
+        UsdPhysicsObjectDesc(UsdPhysicsObjectType::CollisionGroup),
+        invertFilteredGroups(false)
     {        
     }
 
