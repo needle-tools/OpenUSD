@@ -32,6 +32,8 @@
 #include "pxr/imaging/hd/material.h"
 #include "pxr/imaging/hd/mesh.h"
 #include "pxr/imaging/hd/points.h"
+#include "pxr/imaging/hd/volume.h"
+#include "pxr/imaging/hd/field.h"
 #include "pxr/imaging/hd/basisCurvesTopology.h"
 #include "pxr/usd/usdGeom/nurbsCurves.h"
 #include "pxr/imaging/hd/bprim.h"
@@ -548,6 +550,7 @@ private:
 };
 
 #include "webStroke.h"
+#include "webVolume.h"
 
 class Emscripten_Rprim final : public HdMesh {
 public:
@@ -2683,6 +2686,7 @@ const TfTokenVector WebRenderDelegate::SUPPORTED_RPRIM_TYPES =
     HdPrimTypeTokens->mesh,
     HdPrimTypeTokens->points,
     HdPrimTypeTokens->basisCurves,
+    HdPrimTypeTokens->volume,
     HdPrimTypeTokens->particleField
 };
 
@@ -2702,6 +2706,7 @@ const TfTokenVector WebRenderDelegate::SUPPORTED_SPRIM_TYPES =
 
 const TfTokenVector WebRenderDelegate::SUPPORTED_BPRIM_TYPES =
 {
+    TfToken("openvdbAsset"), TfToken("field3dAsset")
 };
 
 const TfTokenVector &
@@ -2782,10 +2787,31 @@ WebRenderDelegate::DestroyInstancer(HdInstancer *instancer)
 }
 
 
+void
+WebRenderDelegate::UpdateVolumeDependencies(HdRenderIndex* index)
+{
+    // Bprim invalidation is propagated before SyncAll. Marking rprims from
+    // field Sync would mutate the scene index while it is being synchronized.
+    for (auto const& id : index->GetRprimIds()) {
+        if (!dynamic_cast<const Emscripten_Volume*>(index->GetRprim(id))) continue;
+        auto* delegate = index->GetSceneDelegateForRprim(id);
+        if (!delegate) continue;
+        for (auto const& field : delegate->GetVolumeFieldDescriptors(id)) {
+            if (index->GetBprim(field.fieldPrimType, field.fieldId) &&
+                index->GetChangeTracker().GetBprimDirtyBits(field.fieldId) != HdField::Clean) {
+                index->GetChangeTracker().MarkRprimDirty(id,
+                    HdChangeTracker::DirtyPrimvar | HdChangeTracker::DirtyExtent);
+                break;
+            }
+        }
+    }
+}
+
 HdRprim *
 WebRenderDelegate::CreateRprim(TfToken const& typeId,
                                     SdfPath const& rprimId)
 {
+    if (typeId == HdPrimTypeTokens->volume) return new Emscripten_Volume(rprimId, &_renderDelegateInterface);
     if (typeId == HdPrimTypeTokens->points || typeId == HdPrimTypeTokens->basisCurves) {
         return new Emscripten_Stroke(typeId, rprimId, &_renderDelegateInterface, this);
     }
@@ -2872,6 +2898,7 @@ HdBprim *
 WebRenderDelegate::CreateBprim(TfToken const& typeId,
                                     SdfPath const& bprimId)
 {
+    if (typeId == TfToken("openvdbAsset") || typeId == TfToken("field3dAsset")) return new Emscripten_Field(bprimId);
     TF_CODING_ERROR("Unknown Bprim Type %s", typeId.GetText());
 
     return nullptr;
@@ -2880,6 +2907,7 @@ WebRenderDelegate::CreateBprim(TfToken const& typeId,
 HdBprim *
 WebRenderDelegate::CreateFallbackBprim(TfToken const& typeId)
 {
+    if (typeId == TfToken("openvdbAsset") || typeId == TfToken("field3dAsset")) return new Emscripten_Field(SdfPath());
     TF_CODING_ERROR("Unknown Bprim Type %s", typeId.GetText());
 
     return nullptr;

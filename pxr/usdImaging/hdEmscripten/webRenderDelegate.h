@@ -116,6 +116,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////
 
     virtual void CommitResources(HdChangeTracker *tracker) override;
+    void UpdateVolumeDependencies(HdRenderIndex* index);
 
 private:
     static const TfTokenVector SUPPORTED_RPRIM_TYPES;

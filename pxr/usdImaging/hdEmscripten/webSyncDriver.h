@@ -205,6 +205,7 @@ public:
                 "UsdImagingDelegate::ApplyPendingUpdates");
             _delegate->ApplyPendingUpdates();
         }
+        _renderDelegate.UpdateVolumeDependencies(_renderIndex);
         // The legacy adapter does not track NodeGraph interface edits, and
         // follows MDL variability even when we choose its paired PreviewSurface.
         // Refresh only affected classes of MDL materials; ordinary MaterialX
