@@ -147,7 +147,13 @@ public:
     {
         HdRprimCollection collection = _GetCollectionForComplexity();
 
-        _Init(UsdStage::Open(usdFilePath),
+        auto* resolver = dynamic_cast<HttpResolver*>(&ArGetUnderlyingResolver());
+        const auto context = resolver ? resolver->CreateScopedContext(usdFilePath)
+                                      : ArGetResolver().CreateDefaultContextForAsset(usdFilePath);
+        if (const auto* httpContext = context.Get<HttpResolverContext>()) {
+            _httpCache = httpContext->scope;
+        }
+        _Init(UsdStage::Open(usdFilePath, context),
               collection,
               SdfPath::AbsoluteRootPath(),
               _GetDefaultRenderTags());
@@ -176,7 +182,15 @@ public:
         TfNotice::Revoke(_materialsNoticeKey);
         delete _delegate;
         delete _renderIndex;
+        _renderDelegate.SetStage(UsdStageRefPtr());
+        _stage.Reset();
+        // USD may retain resolver contexts in its layer caches. Closing this
+        // driver's private scope releases files immediately without touching
+        // another driver; retained contexts no longer resolve its old routes.
+        if (_httpCache) _httpCache->Release();
     }
+
+    bool HasScopedHttpCache() const { return true; }
 
     void Draw() {
         _HdEmscriptenSyncTimer timer("HdWebSyncDriver::Draw");
@@ -395,7 +409,7 @@ public:
 
     std::string resolveAssetUrl(std::string filename) {
         try {
-            auto* httpResolver = dynamic_cast<HttpResolver*>(&ArGetResolver());
+            auto* httpResolver = dynamic_cast<HttpResolver*>(&ArGetUnderlyingResolver());
             if (!httpResolver) {
                 return std::string();
             }
@@ -517,6 +531,7 @@ private:
     UsdImagingDelegate  *_delegate;
     HdRenderPassSharedPtr _geometryPass;
     UsdStageRefPtr _stage;
+    std::shared_ptr<HttpResolverCacheScope> _httpCache;
     TfTokenVector _renderTags;
     float _complexity;
     std::atomic<bool> _drawPending{false};
