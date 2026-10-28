@@ -23,6 +23,7 @@
 #include "httpResolver/resolver.h"
 
 #include "webRenderDelegate.h"
+#include "webPhysics.h"
 #include "pxr/imaging/hd/unitTestNullRenderPass.h"
 #include <emscripten/bind.h>
 #include "pxr/usd/usdSkel/bakeSkinning.h"
@@ -459,6 +460,10 @@ public:
 
     bool HasStage() const {
         return static_cast<bool>(_stage);
+    }
+
+    std::string GetPhysicsSceneJson() const {
+        return HdWebPhysics::SceneJson(_stage);
     }
 
     int GetStageUpAxis() const {

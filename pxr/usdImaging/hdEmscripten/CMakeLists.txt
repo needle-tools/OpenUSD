@@ -172,6 +172,7 @@ add_resources(usdLux)
 add_resources(ar)
 add_resources(usdGeom)
 add_resources(usdSkel)
+add_resources(usdPhysics)
 add_resources(sdr)
 add_resources(httpResolver)
 add_resources(usdDraco)
@@ -281,6 +282,7 @@ _pxr_target_link_libraries(${BINDINGS_NAME}
     usdImaging
     usdUtils
     usdSkel
+    usdPhysics
     usdShaders
     pxOsd
     httpResolver
