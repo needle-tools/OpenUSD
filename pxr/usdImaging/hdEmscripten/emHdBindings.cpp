@@ -87,6 +87,7 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
     .function("GetStage", optional_override([](pxr::HdWebSyncDriver& driver) {
       return get_pointer(driver.GetStage());
     }), allow_raw_pointers())
+    .function("GetPhysicsSceneJson", &pxr::HdWebSyncDriver::GetPhysicsSceneJson)
     .function("GetStageUpAxis", &pxr::HdWebSyncDriver::GetStageUpAxis)
     .function("GetStageStartTimeCode", &pxr::HdWebSyncDriver::GetStageStartTimeCode)
     .function("GetStageEndTimeCode", &pxr::HdWebSyncDriver::GetStageEndTimeCode)
