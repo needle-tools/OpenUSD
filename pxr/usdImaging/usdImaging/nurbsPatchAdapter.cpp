@@ -62,6 +62,11 @@ UsdImagingNurbsPatchAdapter::TrackVariability(UsdPrim const& prim,
     // has been carefully pre-populated to avoid mutating the underlying
     // container during update.
 
+    // Evaluating render delegates also depend on the rational surface data.
+    for (TfToken const& name : TfTokenVector{UsdGeomTokens->uOrder, UsdGeomTokens->vOrder, UsdGeomTokens->uKnots, UsdGeomTokens->vKnots, UsdGeomTokens->uRange, UsdGeomTokens->vRange, UsdGeomTokens->pointWeights}) {
+        _IsVarying(prim, name, HdChangeTracker::DirtyPoints,
+                   UsdImagingTokens->usdVaryingPrimvar, timeVaryingBits, false);
+    }
     // Discover time-varying points.
     _IsVarying(prim,
                UsdGeomTokens->points,
@@ -84,7 +89,14 @@ UsdImagingNurbsPatchAdapter::ProcessPropertyChange(UsdPrim const& prim,
                                                 SdfPath const& cachePath,
                                                 TfToken const& propertyName)
 {
-    if (propertyName == UsdGeomTokens->points) {
+    if (propertyName == UsdGeomTokens->points ||
+        propertyName == UsdGeomTokens->uOrder ||
+        propertyName == UsdGeomTokens->vOrder ||
+        propertyName == UsdGeomTokens->uKnots ||
+        propertyName == UsdGeomTokens->vKnots ||
+        propertyName == UsdGeomTokens->uRange ||
+        propertyName == UsdGeomTokens->vRange ||
+        propertyName == UsdGeomTokens->pointWeights) {
         return HdChangeTracker::DirtyPoints;
     }
 

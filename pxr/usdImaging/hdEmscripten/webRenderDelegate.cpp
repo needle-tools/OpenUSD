@@ -36,6 +36,7 @@
 #include "pxr/imaging/hd/field.h"
 #include "pxr/imaging/hd/basisCurvesTopology.h"
 #include "pxr/usd/usdGeom/nurbsCurves.h"
+#include "pxr/usd/usdGeom/nurbsPatch.h"
 #include "pxr/imaging/hd/bprim.h"
 #include "pxr/imaging/hd/tokens.h"
 #include "pxr/imaging/hd/repr.h"
@@ -2833,6 +2834,10 @@ HdRprim *
 WebRenderDelegate::CreateRprim(TfToken const& typeId,
                                     SdfPath const& rprimId)
 {
+    if (typeId == HdPrimTypeTokens->mesh && GetStage() &&
+        UsdGeomNurbsPatch(GetStage()->GetPrimAtPath(rprimId))) {
+        return new Emscripten_Stroke(HdPrimTypeTokens->nurbsPatch, rprimId, &_renderDelegateInterface, this);
+    }
     if (typeId == HdPrimTypeTokens->volume) return new Emscripten_Volume(rprimId, &_renderDelegateInterface);
     if (typeId == HdPrimTypeTokens->points || typeId == HdPrimTypeTokens->basisCurves) {
         return new Emscripten_Stroke(typeId, rprimId, &_renderDelegateInterface, this);
