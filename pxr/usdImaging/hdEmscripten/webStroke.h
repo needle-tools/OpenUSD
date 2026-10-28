@@ -7,6 +7,7 @@ static val _StrokeValueToJs(VtValue const& value) {
         return result;
     }
 #define STROKE_VECTOR_ARRAY(T) \
+    if (value.IsHolding<T>()) return _GfVecToJsVal(value.UncheckedGet<T>()); \
     if (value.IsHolding<VtArray<T>>()) { \
         val result = val::array(); \
         auto const& values = value.UncheckedGet<VtArray<T>>(); \
@@ -46,9 +47,11 @@ public:
             _rPrim.With([&](val& prim) { prim.call<void>("setMaterial", material); });
         }
         if (HdChangeTracker::IsAnyPrimvarDirty(*bits, id) ||
-            HdChangeTracker::IsTopologyDirty(*bits, id)) {
+            HdChangeTracker::IsTopologyDirty(*bits, id) || (*bits & (HdChangeTracker::DirtyDisplayStyle | HdChangeTracker::DirtyDoubleSided))) {
             VtDictionary data;
             data["points"] = delegate->Get(id, HdTokens->points);
+            const int refine = std::max(0, std::min(3, delegate->GetDisplayStyle(id).refineLevel));
+            data["subdivisions"] = VtValue(16 << refine);
             VtDictionary primvars;
             for (int i = HdInterpolationConstant; i < HdInterpolationCount; ++i) {
                 const auto interpolation = static_cast<HdInterpolation>(i);
@@ -88,6 +91,24 @@ public:
                             VtValue value;
                             if (item.second.Get(&value, time)) data[item.first] = value;
                         }
+                    }
+                }
+            }
+            if (_type == HdPrimTypeTokens->nurbsPatch && _owner->GetStage()) {
+                SdfPath sourcePath = delegate->GetScenePrimPath(id, 0);
+                UsdGeomNurbsPatch patch(_owner->GetStage()->GetPrimAtPath(sourcePath));
+                if (!patch) patch = UsdGeomNurbsPatch(_owner->GetStage()->GetPrimAtPath(id));
+                if (patch) {
+                    const UsdTimeCode time = _owner->GetTime();
+                    for (auto const& item : std::vector<std::pair<std::string, UsdAttribute>>{
+                            {"uCount", patch.GetUVertexCountAttr()}, {"vCount", patch.GetVVertexCountAttr()},
+                            {"uOrder", patch.GetUOrderAttr()}, {"vOrder", patch.GetVOrderAttr()},
+                            {"uKnots", patch.GetUKnotsAttr()}, {"vKnots", patch.GetVKnotsAttr()},
+                            {"uRange", patch.GetURangeAttr()}, {"vRange", patch.GetVRangeAttr()},
+                            {"weights", patch.GetPointWeightsAttr()}, {"orientation", patch.GetOrientationAttr()},
+                            {"doubleSided", patch.GetDoubleSidedAttr()}, {"trimCounts", patch.GetTrimCurveCountsAttr()}}) {
+                        VtValue value;
+                        if (item.second.Get(&value, time)) data[item.first] = value;
                     }
                 }
             }
