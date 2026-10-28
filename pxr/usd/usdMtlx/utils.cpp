@@ -299,6 +299,13 @@ _ReadFromString(mx::DocumentPtr doc, const std::string& s,
                            newReadOptions);
         };
 
+    // readFromXmlFile sets the source URI; resolver-backed reads must do
+    // the same. Custom nodedef shaders use this URI as their sourceAsset.
+    // Without it, HTTP/package documents author sourceAsset="." and cannot
+    // be registered in Sdr when Hydra builds their material network.
+    if (!resolvedPath.empty()) {
+        doc->setSourceUri(resolvedPath.GetPathString());
+    }
     mx::readFromXmlString(doc, s, searchPath, &readOptions);
 
     // Flatten all filenames in document

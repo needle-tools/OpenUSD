@@ -64,6 +64,7 @@
 
 #if __has_include("pxr/imaging/hdMtlx/hdMtlx.h") && __has_include(<MaterialXFormat/XmlIo.h>)
 #include "pxr/imaging/hdMtlx/hdMtlx.h"
+#include "webMaterialX.h"
 #include <MaterialXFormat/XmlIo.h>
 #define HD_EMSCRIPTEN_HAS_MATERIALX 1
 #endif
@@ -2429,6 +2430,7 @@ private:
             return;
         }
 
+        const auto libraries = HdEmscriptenMaterialXLibraries(hdNetwork);
         for (auto const& terminal : hdNetwork.terminals) {
             auto const nodeIt = hdNetwork.nodes.find(terminal.second.upstreamNode);
             if (nodeIt == hdNetwork.nodes.end()) {
@@ -2445,7 +2447,7 @@ private:
                         nodeIt->second,
                         terminal.second.upstreamNode,
                         GetId(),
-                        HdMtlxStdLibraries());
+                        libraries);
 
                 if (!mtlxDoc) {
                     continue;
