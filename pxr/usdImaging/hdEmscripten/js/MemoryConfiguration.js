@@ -1,5 +1,7 @@
 
-if (!Module["ENVIRONMENT_IS_PTHREAD"]){
+// Emscripten sets this runtime flag before pre-js; pthread workers receive
+// the main module's shared memory after startup and must not allocate another.
+if (!ENVIRONMENT_IS_PTHREAD && !Module["wasmMemory"]){
     function isMobileDevice(){
         if (typeof navigator === "undefined") {
             return false;
