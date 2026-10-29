@@ -142,7 +142,7 @@ _TestHolesAndFaceVarying()
         const float corners[4][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
         for (int i = 0; i < 4; ++i) {
             fvarTopologies[0][4 * face + i] = 4 * face + i;
-            uvs[2 * (4 * face + i) + 0] = corners[i][0];
+            uvs[2 * (4 * face + i) + 0] = 2 * face + corners[i][0];
             uvs[2 * (4 * face + i) + 1] = corners[i][1];
         }
     }
@@ -152,8 +152,13 @@ _TestHolesAndFaceVarying()
     std::vector<float> cornerUVs(6 * adaptive.GetNumTriangles());
     assert(adaptive.EvaluateFaceVarying(
         fvarRefiner, uvs.data(), uvs.size() / 2, 2, cornerUVs.data()));
-    for (float value : cornerUVs) {
-        assert(value >= -1e-5f && value <= 1.0f + 1e-5f);
+    for (size_t triangle = 0; triangle < coarseFaces.size(); ++triangle) {
+        for (int corner = 0; corner < 3; ++corner) {
+            const float u = cornerUVs[6*triangle+2*corner];
+            const float v = cornerUVs[6*triangle+2*corner+1];
+            assert(u >= 2*coarseFaces[triangle]-1e-5f && u <= 2*coarseFaces[triangle]+1+1e-5f);
+            assert(v >= -1e-5f && v <= 1+1e-5f);
+        }
     }
 }
 
