@@ -84,6 +84,39 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
     .function("resolveAssetUrl", &pxr::HdWebSyncDriver::resolveAssetUrl)
     .function("HasScopedHttpCache", &pxr::HdWebSyncDriver::HasScopedHttpCache)
     .function("HasStage", &pxr::HdWebSyncDriver::HasStage)
+    // Resolve only the hit instance, not an O(instance count) JS mirror. Hydra's
+    // scene delegate owns native/point/nested instancer index ordering.
+    .function("ResolvePick", optional_override([](pxr::HdWebSyncDriver& driver,
+                                                 const std::string& path,
+                                                 int instanceIndex) {
+      if (!driver.HasStage() || driver.IsDrawPending() || instanceIndex < 0) {
+        return emscripten::val::null();
+      }
+      auto& delegate = driver.GetDelegate();
+      const pxr::SdfPath rprimPath(path);
+      if (!delegate.GetRenderIndex().GetRprim(rprimPath)) {
+        return emscripten::val::null();
+      }
+      std::vector<pxr::HdInstancerContext> contexts;
+      const auto paths = delegate.GetScenePrimPaths(
+          rprimPath, std::vector<int>{instanceIndex}, &contexts);
+      if (paths.empty() || paths.front().IsEmpty()) {
+        return emscripten::val::null();
+      }
+      auto result = emscripten::val::object();
+      result.set("path", paths.front().GetString());
+      auto instances = emscripten::val::array();
+      if (!contexts.empty()) {
+        for (const auto& entry : contexts.front()) {
+          auto instance = emscripten::val::object();
+          instance.set("path", entry.first.GetString());
+          instance.set("index", entry.second);
+          instances.call<void>("push", instance);
+        }
+      }
+      result.set("instances", instances);
+      return result;
+    }))
     .function("GetStage", optional_override([](pxr::HdWebSyncDriver& driver) {
       return get_pointer(driver.GetStage());
     }), allow_raw_pointers())
