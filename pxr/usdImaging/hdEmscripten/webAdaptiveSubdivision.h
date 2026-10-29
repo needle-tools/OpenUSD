@@ -16,7 +16,7 @@
 // normal (or of the sampled chord, whichever is larger) divided by
 // Settings::maxSegmentAngle, clamped to [1, Settings::maxEdgeRate]. When
 // Settings::triangleBudget is non-zero, all rates are scaled down uniformly
-// until the estimated triangle count fits the budget.
+// until the actual tessellation pattern fits the budget.
 
 #include "pxr/pxr.h"
 #include "pxr/base/gf/vec3f.h"
@@ -57,7 +57,7 @@ public:
         int maxEdgeRate = 16;
         // Target limit-normal turning per segment (radians, 7.5 degrees).
         float maxSegmentAngle = 0.13089969f;
-        // Upper bound on estimated triangles; 0 disables the budget.
+        // Upper bound on generated triangles; 0 disables the budget.
         size_t triangleBudget = 0;
     };
 
@@ -115,8 +115,8 @@ public:
     }
 
     // Build the tessellation pattern for an unrefined refiner. Rates are
-    // measured from the given control points; the pattern is reused for
-    // later point-only updates (animation, skinning) via EvaluatePositions.
+    // measured from the given control points. Rebuild when control points
+    // change so deformation cannot retain an undersampled flat pattern.
     bool Build(PxOsdTopologyRefinerSharedPtr const &refiner,
                float const *points,
                size_t numPoints,
@@ -165,7 +165,8 @@ public:
     bool EvaluatePositions(float const *points,
                            size_t numPoints,
                            VtVec3fArray *outPoints,
-                           VtVec3fArray *outNormals) const
+                           VtVec3fArray *outNormals,
+                           VtVec3fArray *outCornerNormals = nullptr) const
     {
         if (!_factory || !points || numPoints < _numCoarseVertices) {
             return false;
@@ -173,6 +174,7 @@ public:
         const size_t numDisplayPoints = GetNumPoints();
         outPoints->assign(numDisplayPoints, GfVec3f(0.0f));
         std::vector<GfVec3f> normalSums(numDisplayPoints, GfVec3f(0.0f));
+        std::vector<GfVec3f> coordNormals(outCornerNormals ? _coordPoints.size() : 0, GfVec3f(0.0f));
 
         Surface surface;
         std::vector<float> patchPoints;
@@ -197,7 +199,9 @@ public:
                                          GfVec3f(dv[0], dv[1], dv[2]));
                 const float length = normal.GetLength();
                 if (length > 0.0f && std::isfinite(length)) {
-                    normalSums[point] += normal / length;
+                    normal /= length;
+                    normalSums[point] += normal;
+                    if (outCornerNormals) coordNormals[c] = normal;
                 }
             }
         }
@@ -233,6 +237,25 @@ public:
                 normal = GfVec3f(0.0f, 0.0f, 1.0f);
             }
             (*outNormals)[i] = normal;
+        }
+        if (outCornerNormals) {
+            // Position indices are shared across patch boundaries. Shading
+            // normals remain per-face, preserving authored sharp creases.
+            outCornerNormals->resize(_triangleCoords.size());
+            for (size_t t = 0; t < GetNumTriangles(); ++t) {
+                const int a = _coordPoints[_triangleCoords[3*t]];
+                const int b = _coordPoints[_triangleCoords[3*t+1]];
+                const int c = _coordPoints[_triangleCoords[3*t+2]];
+                GfVec3f faceNormal = GfCross((*outPoints)[b]-(*outPoints)[a], (*outPoints)[c]-(*outPoints)[a]);
+                faceNormal.Normalize();
+                for (int corner = 0; corner < 3; ++corner) {
+                    const int coord = _triangleCoords[3*t+corner];
+                    GfVec3f normal = coordNormals[coord];
+                    if (normal.GetLength() <= 1e-6f) normal = faceNormal;
+                    if (normal.GetLength() <= 1e-6f) normal = (*outNormals)[_coordPoints[coord]];
+                    (*outCornerNormals)[3*t+corner] = normal;
+                }
+            }
         }
         return true;
     }
@@ -403,24 +426,16 @@ private:
         std::vector<float> patchPoints;
         for (int face = 0; face < _numCoarseFaces; ++face) {
             ConstIndexArray faceEdges = base.GetFaceEdges(face);
-            bool pending = false;
-            for (int i = 0; i < faceEdges.size(); ++i) {
-                pending |= _edgeRates[faceEdges[i]] == 0;
-            }
-            // Holes have no limit surface; their edges are rated by a
-            // neighbouring face, or default to 1 when unused.
-            if (!pending || !_factory->InitVertexSurface(face, &surface)) {
-                continue;
-            }
+            // Both incident faces contribute: a crease may separate a flat
+            // patch from one with stronger normal curvature.
+            if (!_factory->InitVertexSurface(face, &surface)) continue;
             patchPoints.resize(surface.GetNumPatchPoints() * 3);
             surface.PreparePatchPoints(
                 points, PointDesc(3), patchPoints.data(), PointDesc(3));
             for (int i = 0; i < faceEdges.size(); ++i) {
                 int &rate = _edgeRates[faceEdges[i]];
-                if (rate == 0) {
-                    rate = _MeasureEdgeRate(
-                        surface, patchPoints.data(), i, settings);
-                }
+                rate = std::max(rate, _MeasureEdgeRate(
+                    surface, patchPoints.data(), i, settings));
             }
         }
         for (int &rate : _edgeRates) {
@@ -452,32 +467,19 @@ private:
 
     double _EstimateTriangles() const
     {
-        TopologyLevel const &base = _refiner->GetLevel(0);
-        const bool loop =
-            _refiner->GetSchemeType() == OpenSubdiv::Sdc::SCHEME_LOOP;
-        double total = 0.0;
+        const TopologyLevel &base = _refiner->GetLevel(0);
+        Tessellation::Options options;
+        options.SetFacetSize(3);
+        double total = 0;
+        std::vector<int> rates;
         for (int face = 0; face < _numCoarseFaces; ++face) {
-            if (base.IsFaceHole(face)) {
-                continue;
-            }
-            ConstIndexArray edges = base.GetFaceEdges(face);
-            const int size = edges.size();
-            if (size == 4 && !loop) {
-                const double u =
-                    0.5 * (_edgeRates[edges[0]] + _edgeRates[edges[2]]);
-                const double v =
-                    0.5 * (_edgeRates[edges[1]] + _edgeRates[edges[3]]);
-                total += 2.0 * u * v;
-                continue;
-            }
-            double sum = 0.0;
-            for (int i = 0; i < size; ++i) {
-                sum += _edgeRates[edges[i]];
-            }
-            const double average = sum / std::max(size, 1);
-            total += (size == 3 && loop)
-                ? average * average
-                : 0.5 * size * average * average;
+            if (base.IsFaceHole(face)) continue;
+            const ConstIndexArray edges = base.GetFaceEdges(face);
+            const Parameterization param(_refiner->GetSchemeType(), edges.size());
+            rates.resize(edges.size());
+            for (int i = 0; i < edges.size(); ++i) rates[i] = _edgeRates[edges[i]];
+            const Tessellation tessellation(param, edges.size(), rates.data(), options);
+            if (tessellation.IsValid()) total += tessellation.GetNumFacets();
         }
         return total;
     }
@@ -507,9 +509,8 @@ private:
             _faceCoordOffsets[face] = static_cast<int>(_coordPoints.size());
             _faceTriangleOffsets[face] =
                 static_cast<int>(_triangleCoords.size() / 3);
-            if (!_factory->FaceHasLimitSurface(face)) {
-                continue;
-            }
+            if (base.IsFaceHole(face)) continue;
+            if (!_factory->FaceHasLimitSurface(face)) return false;
 
             ConstIndexArray faceVertices = base.GetFaceVertices(face);
             ConstIndexArray faceEdges = base.GetFaceEdges(face);

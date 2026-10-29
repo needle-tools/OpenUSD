@@ -730,7 +730,8 @@ public:
         }
 
         const bool displayTopologyDirty =
-            topologyDirty || subdivTagsDirty || displayStyleDirty || reprDirty;
+            topologyDirty || subdivTagsDirty || displayStyleDirty || reprDirty ||
+            (pointsDirty && _UseAdaptiveTessellation());
         if (pointsDirty || displayTopologyDirty) {
             _UpdateDisplayGeometry(displayTopologyDirty);
             _normalsValid = false;
@@ -776,7 +777,7 @@ public:
             _computedNormals = _adaptiveNormals;
             _normalsValid = true;
             _rPrim.With([&](val& rPrim) {
-                rPrim.call<void>("updateNormals", val(typed_memory_view(3 * _computedNormals.size(), reinterpret_cast<float*>(_computedNormals.data()))));
+                rPrim.call<void>("updateOrderedNormals", val(typed_memory_view(3 * _computedNormals.size(), reinterpret_cast<float*>(_computedNormals.data()))));
             });
         }
         else if (_smoothNormals && !_normalsValid) {
@@ -1462,8 +1463,8 @@ private:
     // Adaptive detail: exact Bfr limit-surface evaluation with per-edge
     // curvature-driven rates, bounded by 2^(refineLevel+1) segments per edge
     // and by the triangle count of uniform refinement at refineLevel. The
-    // pattern is rebuilt when the display topology changes; point-only
-    // updates (animation, baked skinning) re-evaluate the same samples.
+    // pattern is rebuilt when topology or control points change, including
+    // animation and baked skinning, so curvature changes stay represented.
     bool _BuildAdaptiveTopology(bool displayTopologyDirty)
     {
         _HdEmscriptenScopedTimer timer(
@@ -1508,8 +1509,10 @@ private:
             _adaptiveRefineLevel = refineLevel;
         }
 
+        VtVec3fArray vertexNormals;
         if (!_adaptive->EvaluatePositions(
-                points, _points.size(), &_displayPoints, &_adaptiveNormals)) {
+                points, _points.size(), &_displayPoints, &vertexNormals,
+                &_adaptiveNormals)) {
             _adaptive.reset();
             return false;
         }
