@@ -82,6 +82,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <unordered_set>
 #include <vector>
 
 using namespace emscripten;
@@ -899,6 +900,7 @@ private:
 
     HdMeshTopology _topology;
     HdMeshTopology _displayTopology;
+    std::vector<int> _displayFaceCoarseFaces;
     PxOsdTopologyRefinerSharedPtr _topologyRefiner;
     GfMatrix4f _transform;
     VtVec3fArray _points;
@@ -1086,9 +1088,10 @@ private:
     bool _BuildSubdivisionDisplayTopology(
         PxOsdTopologyRefinerSharedPtr const &refiner,
         int refineLevel,
-        HdMeshTopology *displayTopology) const
+        HdMeshTopology *displayTopology,
+        std::vector<int> *displayFaceCoarseFaces) const
     {
-        if (!refiner || !displayTopology) {
+        if (!refiner || !displayTopology || !displayFaceCoarseFaces) {
             return false;
         }
 
@@ -1096,10 +1099,17 @@ private:
             refiner->GetLevel(refineLevel);
         VtIntArray faceVertexCounts;
         VtIntArray faceVertexIndices;
+        VtIntArray holeIndices;
+
+        const VtIntArray &coarseHoles = _topology.GetHoleIndices();
+        const std::unordered_set<int> coarseHoleSet(
+            coarseHoles.cbegin(), coarseHoles.cend());
 
         const int faceCount = lastLevel.GetNumFaces();
         faceVertexCounts.reserve(faceCount);
         faceVertexIndices.reserve(lastLevel.GetNumFaceVertices());
+        displayFaceCoarseFaces->clear();
+        displayFaceCoarseFaces->reserve(faceCount);
         for (int face = 0; face < faceCount; ++face) {
             OpenSubdiv::Far::ConstIndexArray faceVertices =
                 lastLevel.GetFaceVertices(face);
@@ -1107,6 +1117,20 @@ private:
                 continue;
             }
 
+            // Refined faces keep their coarse face identity so geom subsets,
+            // uniform primvars and authored holes address the authored mesh.
+            int coarseFace = face;
+            for (int level = refineLevel; level > 0; --level) {
+                coarseFace = refiner->GetLevel(level).GetFaceParentFace(
+                    coarseFace);
+            }
+            if (lastLevel.IsFaceHole(face) ||
+                coarseHoleSet.count(coarseFace)) {
+                holeIndices.push_back(
+                    static_cast<int>(faceVertexCounts.size()));
+            }
+
+            displayFaceCoarseFaces->push_back(coarseFace);
             faceVertexCounts.push_back(static_cast<int>(faceVertices.size()));
             for (int vertex = 0; vertex < faceVertices.size(); ++vertex) {
                 faceVertexIndices.push_back(faceVertices[vertex]);
@@ -1120,8 +1144,29 @@ private:
             HdTokens->rightHanded,
             faceVertexCounts,
             faceVertexIndices,
+            holeIndices,
             0);
         return true;
+    }
+
+    // HdMeshUtil encodes display face indices; remap them to coarse faces so
+    // every downstream consumer sees authored face identity.
+    void _RemapPrimitiveParamsToCoarseFaces()
+    {
+        if (!_usingRefinedTopology) {
+            return;
+        }
+        for (int &primitiveParam : _trianglePrimitiveParams) {
+            const int displayFace =
+                HdMeshUtil::DecodeFaceIndexFromCoarseFaceParam(primitiveParam);
+            if (displayFace < 0 || static_cast<size_t>(displayFace) >=
+                    _displayFaceCoarseFaces.size()) {
+                continue;
+            }
+            primitiveParam = HdMeshUtil::EncodeCoarseFaceParam(
+                _displayFaceCoarseFaces[displayFace],
+                HdMeshUtil::DecodeEdgeFlagFromCoarseFaceParam(primitiveParam));
+        }
     }
 
     template <class VecT, class ArrayT>
@@ -1378,7 +1423,8 @@ private:
                 std::string("_BuildRefinedTopology display topology ") +
                 GetId().GetString());
             if (!_BuildSubdivisionDisplayTopology(
-                    refiner, refineLevel, &_displayTopology)) {
+                    refiner, refineLevel, &_displayTopology,
+                    &_displayFaceCoarseFaces)) {
                 return false;
             }
         }
@@ -1405,6 +1451,7 @@ private:
                 GetId().GetString());
             _meshUtil->ComputeTriangleIndices(
                 &_triangulatedIndices, &_trianglePrimitiveParams);
+            _RemapPrimitiveParamsToCoarseFaces();
         }
 
         _rPrim.With([&](val& rPrim) {
