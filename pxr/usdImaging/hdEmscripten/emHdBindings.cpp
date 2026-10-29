@@ -117,6 +117,58 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
       result.set("instances", instances);
       return result;
     }))
+    .function("ResolveSelection", optional_override([](pxr::HdWebSyncDriver& driver,
+                                                      const std::string& path,
+                                                      int count,
+                                                      emscripten::val selections) {
+      if (!driver.HasStage() || driver.IsDrawPending() || count < 0) {
+        return emscripten::val::null();
+      }
+      auto& delegate = driver.GetDelegate();
+      const pxr::SdfPath rprimPath(path);
+      if (!delegate.GetRenderIndex().GetRprim(rprimPath)) {
+        return emscripten::val::null();
+      }
+      std::vector<std::pair<pxr::SdfPath, pxr::HdInstancerContext>> targets;
+      for (unsigned i = 0; i < selections["length"].as<unsigned>(); ++i) {
+        const auto value = selections[i];
+        const pxr::SdfPath target(value["path"].as<std::string>());
+        if (!target.IsAbsolutePath()) continue;
+        pxr::HdInstancerContext context;
+        const auto instances = value["instances"];
+        if (!instances.isUndefined() && !instances.isNull()) {
+          for (unsigned j = 0; j < instances["length"].as<unsigned>(); ++j) {
+            context.emplace_back(pxr::SdfPath(instances[j]["path"].as<std::string>()),
+                                 instances[j]["index"].as<int>());
+          }
+        }
+        targets.emplace_back(target, std::move(context));
+      }
+      auto result = emscripten::val::array();
+      if (targets.empty() || !count) return result;
+      std::vector<int> indices(count);
+      for (int i = 0; i < count; ++i) indices[i] = i;
+      std::vector<pxr::HdInstancerContext> contexts;
+      const auto paths = delegate.GetScenePrimPaths(rprimPath, indices, &contexts);
+      for (size_t i = 0; i < paths.size(); ++i) {
+        const pxr::HdInstancerContext empty;
+        const auto& context = i < contexts.size() ? contexts[i] : empty;
+        for (const auto& target : targets) {
+          bool matches = paths[i].HasPrefix(target.first);
+          for (const auto& instance : context) {
+            if (instance.first.HasPrefix(target.first)) matches = true;
+          }
+          if (!matches) continue;
+          for (const auto& required : target.second) {
+            if (std::find(context.begin(), context.end(), required) == context.end()) {
+              matches = false; break;
+            }
+          }
+          if (matches) {result.call<void>("push", static_cast<int>(i)); break;}
+        }
+      }
+      return result;
+    }))
     .function("GetStage", optional_override([](pxr::HdWebSyncDriver& driver) {
       return get_pointer(driver.GetStage());
     }), allow_raw_pointers())
