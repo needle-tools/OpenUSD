@@ -60,6 +60,31 @@
 #include <vector>
 using namespace emscripten;
 
+namespace {
+// The legacy imaging adapter uses variant-selection syntax for some duplicated
+// nested instancers. These cache addresses are not composed USD prim paths.
+pxr::SdfPath AuthoredInstancePath(pxr::UsdStageRefPtr const& stage,
+                                pxr::SdfPath const& path) {
+  if (stage && stage->GetPrimAtPath(path)) return path;
+  const auto composed = path.StripAllVariantSelections();
+  return stage && stage->GetPrimAtPath(composed) ? composed : path;
+}
+
+using InstanceIdCache = std::map<pxr::SdfPath, pxr::VtInt64Array>;
+std::string PointInstanceId(pxr::UsdStageRefPtr const& stage,
+                            pxr::SdfPath const& path, int index,
+                            pxr::UsdTimeCode time, InstanceIdCache& cache) {
+  auto inserted = cache.emplace(path, pxr::VtInt64Array());
+  if (inserted.second && stage) {
+    const auto prim = stage->GetPrimAtPath(path);
+    if (prim) prim.GetAttribute(pxr::TfToken("ids")).Get(&inserted.first->second, time);
+  }
+  const auto& ids = inserted.first->second;
+  return index >= 0 && static_cast<size_t>(index) < ids.size()
+      ? std::to_string(ids[index]) : std::string();
+}
+}
+
 #include "generated/emHdCoreBindings.inc"
 
 EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
@@ -104,13 +129,18 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
         return emscripten::val::null();
       }
       auto result = emscripten::val::object();
-      result.set("path", paths.front().GetString());
+      result.set("path", AuthoredInstancePath(driver.GetStage(), paths.front()).GetString());
       auto instances = emscripten::val::array();
+      InstanceIdCache idCache;
       if (!contexts.empty()) {
         for (const auto& entry : contexts.front()) {
           auto instance = emscripten::val::object();
-          instance.set("path", entry.first.GetString());
+          const auto authored = AuthoredInstancePath(driver.GetStage(), entry.first);
+          instance.set("path", authored.GetString());
           instance.set("index", entry.second);
+          const auto id = PointInstanceId(driver.GetStage(), authored, entry.second,
+                                          delegate.GetTime(), idCache);
+          if (!id.empty()) instance.set("id", id);
           instances.call<void>("push", instance);
         }
       }
@@ -129,20 +159,24 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
       if (!delegate.GetRenderIndex().GetRprim(rprimPath)) {
         return emscripten::val::null();
       }
-      std::vector<std::pair<pxr::SdfPath, pxr::HdInstancerContext>> targets;
+      struct Context {pxr::SdfPath path; int index; std::string id;};
+      struct Target {pxr::SdfPath path; std::vector<Context> context;};
+      std::vector<Target> targets;
       for (unsigned i = 0; i < selections["length"].as<unsigned>(); ++i) {
         const auto value = selections[i];
         const pxr::SdfPath target(value["path"].as<std::string>());
         if (!target.IsAbsolutePath()) continue;
-        pxr::HdInstancerContext context;
+        std::vector<Context> context;
         const auto instances = value["instances"];
         if (!instances.isUndefined() && !instances.isNull()) {
           for (unsigned j = 0; j < instances["length"].as<unsigned>(); ++j) {
-            context.emplace_back(pxr::SdfPath(instances[j]["path"].as<std::string>()),
-                                 instances[j]["index"].as<int>());
+            const auto id = instances[j]["id"];
+            context.push_back({pxr::SdfPath(instances[j]["path"].as<std::string>()),
+                               instances[j]["index"].as<int>(),
+                               id.isString() ? id.as<std::string>() : std::string()});
           }
         }
-        targets.emplace_back(target, std::move(context));
+        targets.push_back({target, std::move(context)});
       }
       auto result = emscripten::val::array();
       if (targets.empty() || !count) return result;
@@ -150,19 +184,27 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
       for (int i = 0; i < count; ++i) indices[i] = i;
       std::vector<pxr::HdInstancerContext> contexts;
       const auto paths = delegate.GetScenePrimPaths(rprimPath, indices, &contexts);
+      InstanceIdCache idCache;
       for (size_t i = 0; i < paths.size(); ++i) {
         const pxr::HdInstancerContext empty;
         const auto& context = i < contexts.size() ? contexts[i] : empty;
         for (const auto& target : targets) {
-          bool matches = paths[i].HasPrefix(target.first);
+          bool matches = AuthoredInstancePath(driver.GetStage(), paths[i]).HasPrefix(target.path);
           for (const auto& instance : context) {
-            if (instance.first.HasPrefix(target.first)) matches = true;
+            if (AuthoredInstancePath(driver.GetStage(), instance.first).HasPrefix(target.path)) matches = true;
           }
           if (!matches) continue;
-          for (const auto& required : target.second) {
-            if (std::find(context.begin(), context.end(), required) == context.end()) {
-              matches = false; break;
+          for (const auto& required : target.context) {
+            bool found = false;
+            for (const auto& actual : context) {
+              const auto authored = AuthoredInstancePath(driver.GetStage(), actual.first);
+              if (authored != required.path) continue;
+              found = required.id.empty() ? actual.second == required.index
+                  : PointInstanceId(driver.GetStage(), authored, actual.second,
+                                    delegate.GetTime(), idCache) == required.id;
+              if (found) break;
             }
+            if (!found) {matches = false; break;}
           }
           if (matches) {result.call<void>("push", static_cast<int>(i)); break;}
         }
