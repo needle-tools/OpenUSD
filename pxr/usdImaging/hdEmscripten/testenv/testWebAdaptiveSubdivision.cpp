@@ -194,6 +194,59 @@ _TestFlatBilinearGrid()
     assert(adaptive.GetNumPoints() == 6);
 }
 
+void
+_TestSharpCreaseNormals()
+{
+    PxOsdMeshTopology topology = _Cube(PxOsdOpenSubdivTokens->catmullClark);
+    auto initial = PxOsdRefinerFactory::Create(topology, TfToken());
+    const auto &base = initial->GetLevel(0);
+    VtIntArray creaseIndices;
+    for (int edge = 0; edge < base.GetNumEdges(); ++edge) {
+        const auto vertices = base.GetEdgeVertices(edge);
+        creaseIndices.push_back(vertices[0]);
+        creaseIndices.push_back(vertices[1]);
+    }
+    PxOsdSubdivTags tags;
+    tags.SetCreaseIndices(creaseIndices);
+    tags.SetCreaseLengths(VtIntArray(base.GetNumEdges(), 2));
+    tags.SetCreaseWeights(VtFloatArray(base.GetNumEdges(), 10.0f));
+    const auto refiner = PxOsdRefinerFactory::Create(topology.WithSubdivTags(tags), TfToken());
+    Adaptive adaptive;
+    assert(adaptive.Build(refiner, _CubePoints().data(), 8, Adaptive::Settings()));
+    VtVec3fArray points, vertexNormals, cornerNormals;
+    assert(adaptive.EvaluatePositions(_CubePoints().data(), 8, &points, &vertexNormals, &cornerNormals));
+    VtIntArray counts, indices;
+    std::vector<int> coarseFaces;
+    adaptive.GetTriangles(&counts, &indices, &coarseFaces);
+    assert(cornerNormals.size() == indices.size());
+    for (size_t t = 0; t < coarseFaces.size(); ++t) {
+        GfVec3f expected = GfCross(points[indices[3*t+1]]-points[indices[3*t]],
+                                   points[indices[3*t+2]]-points[indices[3*t]]);
+        expected.Normalize();
+        for (int corner = 0; corner < 3; ++corner) {
+            assert(GfDot(expected, cornerNormals[3*t+corner]) > .999f);
+        }
+    }
+}
+
+void
+_TestAsymmetricBudget()
+{
+    auto points = _CubePoints();
+    points[0] -= 1.5f; points[10] += 1.0f; points[17] += .7f;
+    const auto refiner = PxOsdRefinerFactory::Create(_Cube(PxOsdOpenSubdivTokens->catmullClark), TfToken());
+    for (size_t budget : {size_t(24), size_t(48), size_t(96), size_t(160)}) {
+        Adaptive::Settings settings;
+        settings.maxEdgeRate = 16; settings.triangleBudget = budget;
+        Adaptive adaptive;
+        assert(adaptive.Build(refiner, points.data(), 8, settings));
+        assert(adaptive.GetNumTriangles() <= budget);
+        VtIntArray counts, indices; std::vector<int> faces;
+        adaptive.GetTriangles(&counts, &indices, &faces);
+        _AssertClosedAndOriented(indices);
+    }
+}
+
 } // namespace
 
 int main()
@@ -202,6 +255,8 @@ int main()
     _TestHolesAndFaceVarying();
     _TestLoopTetrahedron();
     _TestFlatBilinearGrid();
+    _TestSharpCreaseNormals();
+    _TestAsymmetricBudget();
     std::cout << "testWebAdaptiveSubdivision OK" << std::endl;
     return 0;
 }
