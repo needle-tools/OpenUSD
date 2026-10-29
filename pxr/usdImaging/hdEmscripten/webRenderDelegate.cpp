@@ -22,6 +22,7 @@
 // language governing permissions and limitations under the Apache License.
 //
 #include "webRenderDelegate.h"
+#include "webAdaptiveSubdivision.h"
 #include "webMdlMaterial.h"
 #include "pxr/usdImaging/usdImaging/materialParamUtils.h"
 #include "pxr/base/gf/vec2f.h"
@@ -555,14 +556,26 @@ private:
 #include "webStroke.h"
 #include "webVolume.h"
 
+template <class T>
+struct HdEmscripten_PrimvarDimension {
+    static constexpr int value = static_cast<int>(T::dimension);
+};
+
+template <>
+struct HdEmscripten_PrimvarDimension<float> {
+    static constexpr int value = 1;
+};
+
 class Emscripten_Rprim final : public HdMesh {
 public:
     Emscripten_Rprim(TfToken const& typeId,
                  SdfPath const& id,
-                 emscripten::val *renderDelegateInterface)
+                 emscripten::val *renderDelegateInterface,
+                 WebRenderDelegate const *renderDelegate)
      : HdMesh(id)
      , _typeId(typeId)
      , _renderDelegateInterface(renderDelegateInterface)
+     , _renderDelegate(renderDelegate)
      , _meshUtil(NULL)
      , _adjacencyValid(false)
      , _normalsValid(false)
@@ -716,9 +729,10 @@ public:
             _topology.SetSubdivTags(delegate->GetSubdivTags(id));
         }
 
-        if (pointsDirty || topologyDirty || subdivTagsDirty || displayStyleDirty ||
-            reprDirty) {
-            _UpdateDisplayGeometry();
+        const bool displayTopologyDirty =
+            topologyDirty || subdivTagsDirty || displayStyleDirty || reprDirty;
+        if (pointsDirty || displayTopologyDirty) {
+            _UpdateDisplayGeometry(displayTopologyDirty);
             _normalsValid = false;
             _adjacencyValid = false;
         }
@@ -735,9 +749,12 @@ public:
             _normalsValid = false;
         }
         if (HdChangeTracker::IsAnyPrimvarDirty(*dirtyBits, id) ||
-            pointsDirty || topologyDirty || subdivTagsDirty ||
-            displayStyleDirty || reprDirty) {
-            _SyncPrimvars(delegate, *dirtyBits);
+            pointsDirty || displayTopologyDirty) {
+            // A new display topology (detail level, adaptive toggle, subdiv
+            // tags) invalidates every refined primvar, not only dirty ones.
+            _SyncPrimvars(delegate, displayTopologyDirty
+                ? (*dirtyBits | HdChangeTracker::DirtyPrimvar)
+                : *dirtyBits);
         }
 
         _smoothNormals = _UseSmoothNormals();
@@ -746,14 +763,23 @@ public:
         // 1. If the topology is dirty, update the adjacency table, a processed
         //    form of the topology that helps calculate smooth normals quickly.
         // 2. If the points are dirty, update the smooth normal buffer itself.
-        if (_smoothNormals && !_adjacencyValid) {
+        if (_smoothNormals && !_adjacencyValid &&
+            !_usingAdaptiveTessellation) {
             _adjacency.BuildAdjacencyTable(&_topology);
             _adjacencyValid = true;
             // If we rebuilt the adjacency table, force a rebuild of normals.
             _normalsValid = false;
         }
 
-        if (_smoothNormals && !_normalsValid) {
+        if (_smoothNormals && !_normalsValid && _usingAdaptiveTessellation) {
+            // Limit-surface normals from the same Bfr evaluation as points.
+            _computedNormals = _adaptiveNormals;
+            _normalsValid = true;
+            _rPrim.With([&](val& rPrim) {
+                rPrim.call<void>("updateNormals", val(typed_memory_view(3 * _computedNormals.size(), reinterpret_cast<float*>(_computedNormals.data()))));
+            });
+        }
+        else if (_smoothNormals && !_normalsValid) {
             VtVec3fArray coarseNormals = Hd_SmoothNormals::ComputeSmoothNormals(
                 &_adjacency, _points.size(), _points.cdata());
             if (_usingRefinedTopology &&
@@ -891,6 +917,7 @@ private:
 
     TfToken _typeId;
     emscripten::val *_renderDelegateInterface;
+    WebRenderDelegate const *_renderDelegate;
     MainThreadJsVal _rPrim;
     HdMeshUtil *_meshUtil;
 
@@ -915,6 +942,12 @@ private:
     HdMeshGeomStyle _reprGeomStyle;
     bool _displayStyleFlatShadingEnabled;
     bool _usingRefinedTopology = false;
+    // Adaptive limit tessellation replaces uniform refinement when enabled
+    // on the render delegate; it still publishes a refined display topology.
+    bool _usingAdaptiveTessellation = false;
+    std::unique_ptr<HdEmscriptenAdaptiveSubdivision> _adaptive;
+    int _adaptiveRefineLevel = 0;
+    VtVec3fArray _adaptiveNormals;
 
     HdMeshTopology const &_GetDisplayTopology() const {
         return _usingRefinedTopology ? _displayTopology : _topology;
@@ -1183,6 +1216,19 @@ private:
             return false;
         }
 
+        if (_usingAdaptiveTessellation) {
+            if (!_adaptive) {
+                return false;
+            }
+            refinedValues->assign(_adaptive->GetNumPoints(), VecT(0.0f));
+            return _adaptive->EvaluateVertexOrVarying(
+                reinterpret_cast<float const *>(coarseValues.cdata()),
+                coarseValues.size(),
+                HdEmscripten_PrimvarDimension<VecT>::value,
+                interpolation == HdInterpolationVarying,
+                reinterpret_cast<float *>(refinedValues->data()));
+        }
+
         PxOsdTopologyRefinerSharedPtr refiner = _topologyRefiner
             ? _topologyRefiner
             : _CreateTopologyRefiner();
@@ -1281,6 +1327,24 @@ private:
         fvarTopologies[0].assign(
             fvarIndices.begin(),
             fvarIndices.begin() + numFaceVaryings);
+
+        if (_usingAdaptiveTessellation) {
+            if (!_adaptive) {
+                return false;
+            }
+            PxOsdTopologyRefinerSharedPtr fvarRefiner =
+                PxOsdRefinerFactory::Create(
+                    _topology.GetPxOsdMeshTopology(), fvarTopologies,
+                    TfToken());
+            refinedValues->assign(
+                3 * _adaptive->GetNumTriangles(), VecT(0.0f));
+            return _adaptive->EvaluateFaceVarying(
+                fvarRefiner,
+                reinterpret_cast<float const *>(coarseValues.cdata()),
+                coarseValues.size(),
+                HdEmscripten_PrimvarDimension<VecT>::value,
+                reinterpret_cast<float *>(refinedValues->data()));
+        }
 
         PxOsdTopologyRefinerSharedPtr refiner =
             _CreateTopologyRefiner(&fvarTopologies);
@@ -1385,11 +1449,79 @@ private:
         });
     }
 
-    bool _BuildRefinedTopology()
+    bool _UseAdaptiveTessellation() const
+    {
+        return _renderDelegate &&
+            _renderDelegate->GetAdaptiveSubdivision() &&
+            _GetEffectiveRefineLevel() > 0 &&
+            _topology.GetScheme() != PxOsdOpenSubdivTokens->none &&
+            (_topology.GetScheme() != PxOsdOpenSubdivTokens->loop ||
+             _IsLoopSubdivisionTopologyValid(_topology));
+    }
+
+    // Adaptive detail: exact Bfr limit-surface evaluation with per-edge
+    // curvature-driven rates, bounded by 2^(refineLevel+1) segments per edge
+    // and by the triangle count of uniform refinement at refineLevel. The
+    // pattern is rebuilt when the display topology changes; point-only
+    // updates (animation, baked skinning) re-evaluate the same samples.
+    bool _BuildAdaptiveTopology(bool displayTopologyDirty)
+    {
+        _HdEmscriptenScopedTimer timer(
+            std::string("_BuildAdaptiveTopology ") + GetId().GetString());
+        const int refineLevel = _GetEffectiveRefineLevel();
+        float const *points = reinterpret_cast<float const *>(_points.cdata());
+        const bool reusePattern = !displayTopologyDirty && _adaptive &&
+            _adaptive->IsValid() && _adaptiveRefineLevel == refineLevel &&
+            _adaptive->GetNumCoarseVertices() <= _points.size();
+        if (!reusePattern) {
+            _adaptive.reset();
+            PxOsdTopologyRefinerSharedPtr refiner = PxOsdRefinerFactory::Create(
+                _topology.GetPxOsdMeshTopology(), TfToken());
+            if (!refiner) {
+                return false;
+            }
+            HdEmscriptenAdaptiveSubdivision::Settings settings;
+            settings.maxEdgeRate = 1 << std::min(refineLevel + 1, 6);
+            settings.triangleBudget =
+                HdEmscriptenAdaptiveSubdivision::EstimateUniformTriangles(
+                    *refiner, refineLevel);
+            std::unique_ptr<HdEmscriptenAdaptiveSubdivision> adaptive(
+                new HdEmscriptenAdaptiveSubdivision());
+            if (!adaptive->Build(refiner, points, _points.size(), settings)) {
+                return false;
+            }
+
+            VtIntArray faceVertexCounts;
+            VtIntArray faceVertexIndices;
+            adaptive->GetTriangles(
+                &faceVertexCounts, &faceVertexIndices,
+                &_displayFaceCoarseFaces);
+            // Hole faces produce no triangles, so the display topology needs
+            // no hole indices. Bfr output follows the refiner's RH winding.
+            _displayTopology = HdMeshTopology(
+                PxOsdOpenSubdivTokens->none,
+                HdTokens->rightHanded,
+                faceVertexCounts,
+                faceVertexIndices,
+                0);
+            _adaptive = std::move(adaptive);
+            _adaptiveRefineLevel = refineLevel;
+        }
+
+        if (!_adaptive->EvaluatePositions(
+                points, _points.size(), &_displayPoints, &_adaptiveNormals)) {
+            _adaptive.reset();
+            return false;
+        }
+        return true;
+    }
+
+    bool _BuildRefinedTopology(bool displayTopologyDirty)
     {
         _HdEmscriptenScopedTimer timer(
             std::string("_BuildRefinedTopology ") + GetId().GetString());
         _usingRefinedTopology = false;
+        _usingAdaptiveTessellation = false;
         _displayPoints.clear();
         _topologyRefiner.reset();
 
@@ -1397,8 +1529,22 @@ private:
         if (_points.empty() ||
             refineLevel <= 0 ||
             _topology.GetScheme() == PxOsdOpenSubdivTokens->none) {
+            _adaptive.reset();
             return false;
         }
+
+        if (_UseAdaptiveTessellation()) {
+            if (_BuildAdaptiveTopology(displayTopologyDirty)) {
+                _usingRefinedTopology = true;
+                _usingAdaptiveTessellation = true;
+                return true;
+            }
+            TF_WARN("Adaptive limit tessellation failed for <%s>; using "
+                "uniform refinement level %d.", GetId().GetText(),
+                refineLevel);
+            _displayPoints.clear();
+        }
+        _adaptive.reset();
 
         PxOsdTopologyRefinerSharedPtr refiner = _CreateTopologyRefiner();
         if (!refiner) {
@@ -1433,11 +1579,11 @@ private:
         return true;
     }
 
-    void _UpdateDisplayGeometry()
+    void _UpdateDisplayGeometry(bool displayTopologyDirty)
     {
         _HdEmscriptenScopedTimer timer(
             std::string("_UpdateDisplayGeometry ") + GetId().GetString());
-        _BuildRefinedTopology();
+        _BuildRefinedTopology(displayTopologyDirty);
         const HdMeshTopology &displayTopology = _GetDisplayTopology();
         const VtVec3fArray &displayPoints = _GetDisplayPoints();
 
@@ -1585,6 +1731,14 @@ private:
         } else if (value.CanCast<VtVec4fArray>()) {
             VtVec4fArray primvarData = value.Get<VtVec4fArray>();
             if (_RefinePrimvarData<GfVec4f>(
+                    &primvarData, interpolation, fvarIndices)) {
+                return VtValue(primvarData);
+            }
+        } else if (value.IsHolding<VtFloatArray>()) {
+            // Scalar primvars (e.g. per-vertex displayOpacity) must match the
+            // refined point/face-vertex count like vector primvars do.
+            VtFloatArray primvarData = value.UncheckedGet<VtFloatArray>();
+            if (_RefinePrimvarData<float>(
                     &primvarData, interpolation, fvarIndices)) {
                 return VtValue(primvarData);
             }
@@ -2893,7 +3047,8 @@ WebRenderDelegate::CreateRprim(TfToken const& typeId,
         return new Emscripten_ParticleField(
             rprimId, &_renderDelegateInterface);
     }
-    return new Emscripten_Rprim(typeId, rprimId, &_renderDelegateInterface);
+    return new Emscripten_Rprim(
+        typeId, rprimId, &_renderDelegateInterface, this);
 }
 
 void
