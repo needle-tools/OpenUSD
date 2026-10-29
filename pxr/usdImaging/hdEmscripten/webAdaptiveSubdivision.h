@@ -99,8 +99,9 @@ public:
 
     void Clear()
     {
-        _refiner.reset();
+        // The factory references the refiner; release it first.
         _factory.reset();
+        _refiner.reset();
         _numCoarseVertices = 0;
         _numCoarseFaces = 0;
         _edgeRates.clear();
