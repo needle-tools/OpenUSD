@@ -21,6 +21,7 @@
 
 #include <emscripten/bind.h>
 #include <emscripten/threading.h>
+#include <atomic>
 #include <functional>
 #include <map>
 #include <mutex>
@@ -55,6 +56,10 @@ public:
         std::lock_guard<std::mutex> lock(_mdlMaterialMutex);
         return _mdlMaterials;
     }
+    // Refined meshes use Bfr limit-surface tessellation instead of uniform
+    // refinement. Callers must mark rprim display styles dirty on change.
+    void SetAdaptiveSubdivision(bool enabled) { _adaptiveSubdivision = enabled; }
+    bool GetAdaptiveSubdivision() const { return _adaptiveSubdivision; }
 
     virtual const TfTokenVector &GetSupportedRprimTypes() const override;
     virtual const TfTokenVector &GetSupportedSprimTypes() const override;
@@ -133,6 +138,7 @@ private:
     UsdTimeCode _time = UsdTimeCode::Default();
     mutable std::mutex _mdlMaterialMutex;
     std::map<SdfPath, bool> _mdlMaterials;
+    std::atomic<bool> _adaptiveSubdivision{false};
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

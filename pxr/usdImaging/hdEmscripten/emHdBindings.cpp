@@ -105,6 +105,8 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
     .function("SetRefineLevelFallback", &pxr::HdWebSyncDriver::SetRefineLevelFallback)
     .function("GetComplexity", &pxr::HdWebSyncDriver::GetComplexity)
     .function("SetComplexity", &pxr::HdWebSyncDriver::SetComplexity)
+    .function("GetAdaptiveSubdivision", &pxr::HdWebSyncDriver::GetAdaptiveSubdivision)
+    .function("SetAdaptiveSubdivision", &pxr::HdWebSyncDriver::SetAdaptiveSubdivision)
     .function("getFile", &pxr::HdWebSyncDriver::getFile)
     .function("resolveAssetUrl", &pxr::HdWebSyncDriver::resolveAssetUrl)
     .function("HasScopedHttpCache", &pxr::HdWebSyncDriver::HasScopedHttpCache)

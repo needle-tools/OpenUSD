@@ -354,6 +354,23 @@ public:
         return _complexity;
     }
 
+    // Adaptive limit tessellation for meshes refined by the current
+    // complexity. The complexity's refine level bounds its cost.
+    bool GetAdaptiveSubdivision() const {
+        return _renderDelegate.GetAdaptiveSubdivision();
+    }
+
+    void SetAdaptiveSubdivision(bool enabled) {
+        if (_renderDelegate.GetAdaptiveSubdivision() == enabled) {
+            return;
+        }
+        _renderDelegate.SetAdaptiveSubdivision(enabled);
+        if (_renderIndex) {
+            _renderIndex->GetChangeTracker().MarkAllRprimsDirty(
+                HdChangeTracker::DirtyDisplayStyle);
+        }
+    }
+
     void SetComplexity(float complexity) {
         _complexity = complexity;
         if (!_delegate) {
