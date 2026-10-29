@@ -116,6 +116,21 @@ _TestCatmarkCube()
 }
 
 void
+_TestLeftHandedNormals()
+{
+    const auto cube = _Cube(PxOsdOpenSubdivTokens->catmullClark);
+    const PxOsdMeshTopology left(cube.GetScheme(), PxOsdOpenSubdivTokens->leftHanded,
+        cube.GetFaceVertexCounts(), cube.GetFaceVertexIndices());
+    auto refiner = PxOsdRefinerFactory::Create(left, TfToken());
+    Adaptive adaptive;
+    assert(adaptive.Build(refiner, _CubePoints().data(), 8, Adaptive::Settings()));
+    VtVec3fArray points, normals, cornerNormals;
+    assert(adaptive.EvaluatePositions(_CubePoints().data(), 8, &points, &normals, &cornerNormals));
+    // Reversing the authored orientation must reverse surface winding/normals.
+    for (size_t i=0;i<points.size();++i) assert(GfDot(normals[i], points[i]) < 0.0f);
+}
+
+void
 _TestHolesAndFaceVarying()
 {
     const VtIntArray holes = {2};
@@ -257,6 +272,7 @@ _TestAsymmetricBudget()
 int main()
 {
     _TestCatmarkCube();
+    _TestLeftHandedNormals();
     _TestHolesAndFaceVarying();
     _TestLoopTetrahedron();
     _TestFlatBilinearGrid();
