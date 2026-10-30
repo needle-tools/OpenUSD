@@ -5,6 +5,10 @@
 
 #include "pxr/base/tf/stringUtils.h"
 #include "pxr/base/gf/matrix4d.h"
+#include "pxr/base/gf/quatf.h"
+#include "pxr/base/gf/quatd.h"
+#include "pxr/base/gf/quath.h"
+#include "pxr/base/gf/vec3h.h"
 #include "pxr/base/gf/vec3d.h"
 #include "pxr/base/gf/vec3f.h"
 #include "pxr/base/vt/array.h"
@@ -24,6 +28,7 @@
 #include "pxr/usd/usd/attribute.h"
 #include "pxr/usd/usd/editContext.h"
 #include "pxr/usd/usd/payloads.h"
+#include "pxr/usd/usd/references.h"
 #include "pxr/usd/usd/prim.h"
 #include "pxr/usd/usd/primCompositionQuery.h"
 #include "pxr/usd/usd/relationship.h"

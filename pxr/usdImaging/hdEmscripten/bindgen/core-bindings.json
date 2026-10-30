@@ -1,5 +1,6 @@
 {
   "classes": [
+    {"cppType": "pxr::UsdEditTarget", "jsName": "EditTarget", "tsName": "USDEditTarget", "methods": [{"jsName": "IsValid", "tsArgs": [], "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdEditTarget::IsValid"}]},
     {
       "cppType": "pxr::SdfLayer",
       "jsName": "Layer",
@@ -10,7 +11,9 @@
         { "jsName": "GetRealPath", "tsReturn": "string", "op": "layerGetRealPath" },
         { "jsName": "ExportToString", "tsReturn": "string", "op": "layerExportToString" },
         { "jsName": "Export", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "boolean", "op": "layerExport" },
-        { "jsName": "Save", "tsReturn": "boolean", "op": "layerSave" }
+        { "jsName": "Save", "tsReturn": "boolean", "op": "layerSave" },
+        {"jsName": "GetSubLayerPaths", "tsArgs": [], "tsReturn": "string[]", "op": "direct", "cpp": "emscripten::optional_override([](pxr::SdfLayer const& layer) { return _StringVectorToVal(layer.GetSubLayerPaths()); })"},
+        {"jsName": "SetSubLayerPaths", "tsArgs": [{"name": "paths", "type": "string[]"}], "tsReturn": "void", "tsMayAsync": true, "op": "direct", "cpp": "emscripten::optional_override([](pxr::SdfLayer& layer, emscripten::val paths) { auto values = _StringArrayFromVal(paths); layer.SetSubLayerPaths(std::vector<std::string>(values.begin(), values.end())); })"}
       ]
     },
     {
@@ -46,7 +49,8 @@
         { "jsName": "SetColor3f", "tsArgs": [{ "name": "r", "type": "number" }, { "name": "g", "type": "number" }, { "name": "b", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetColor3f" },
         { "jsName": "SetVec3f", "tsArgs": [{ "name": "x", "type": "number" }, { "name": "y", "type": "number" }, { "name": "z", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetVec3f" },
         { "jsName": "SetVec3d", "tsArgs": [{ "name": "x", "type": "number" }, { "name": "y", "type": "number" }, { "name": "z", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetVec3d" },
-        { "jsName": "SetMatrix4d", "tsArgs": [{ "name": "m00", "type": "number" }, { "name": "m01", "type": "number" }, { "name": "m02", "type": "number" }, { "name": "m03", "type": "number" }, { "name": "m10", "type": "number" }, { "name": "m11", "type": "number" }, { "name": "m12", "type": "number" }, { "name": "m13", "type": "number" }, { "name": "m20", "type": "number" }, { "name": "m21", "type": "number" }, { "name": "m22", "type": "number" }, { "name": "m23", "type": "number" }, { "name": "m30", "type": "number" }, { "name": "m31", "type": "number" }, { "name": "m32", "type": "number" }, { "name": "m33", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetMatrix4d" }
+        { "jsName": "SetMatrix4d", "tsArgs": [{ "name": "m00", "type": "number" }, { "name": "m01", "type": "number" }, { "name": "m02", "type": "number" }, { "name": "m03", "type": "number" }, { "name": "m10", "type": "number" }, { "name": "m11", "type": "number" }, { "name": "m12", "type": "number" }, { "name": "m13", "type": "number" }, { "name": "m20", "type": "number" }, { "name": "m21", "type": "number" }, { "name": "m22", "type": "number" }, { "name": "m23", "type": "number" }, { "name": "m30", "type": "number" }, { "name": "m31", "type": "number" }, { "name": "m32", "type": "number" }, { "name": "m33", "type": "number" }, { "name": "timeCode", "type": "number" }], "tsReturn": "boolean", "op": "attributeSetMatrix4d" },
+        {"jsName": "SetMetadata", "tsArgs": [{"name": "key", "type": "string"}, {"name": "value", "type": "unknown"}], "tsReturn": "boolean", "op": "direct", "cpp": "emscripten::optional_override([](pxr::UsdAttribute const& self, std::string const& key, emscripten::val value) { return _SetObjectMetadata(self, key, value); })"}
       ]
     },
     {
@@ -64,7 +68,8 @@
         { "jsName": "GetPropertyStackWithLayerOffsets", "tsArgs": [{ "name": "timeCode", "type": "number" }], "tsReturn": "USDSpecStack", "op": "propertyStackWithLayerOffsets" },
         { "jsName": "GetTargets", "tsReturn": "StringVector", "op": "relationshipTargets" },
         { "jsName": "AddTarget", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "boolean", "op": "relationshipAddTarget" },
-        { "jsName": "ClearTargets", "tsArgs": [{ "name": "removeSpec", "type": "boolean" }], "tsReturn": "boolean", "op": "relationshipClearTargets" }
+        { "jsName": "ClearTargets", "tsArgs": [{ "name": "removeSpec", "type": "boolean" }], "tsReturn": "boolean", "op": "relationshipClearTargets" },
+        {"jsName": "SetMetadata", "tsArgs": [{"name": "key", "type": "string"}, {"name": "value", "type": "unknown"}], "tsReturn": "boolean", "op": "direct", "cpp": "emscripten::optional_override([](pxr::UsdRelationship const& self, std::string const& key, emscripten::val value) { return _SetObjectMetadata(self, key, value); })"}
       ]
     },
     {
@@ -118,7 +123,11 @@
         { "jsName": "BlockVariantSelection", "tsArgs": [{ "name": "variantSetName", "type": "string" }], "tsReturn": "boolean", "op": "primBlockVariantSelection" },
         { "jsName": "GetVariantSetNames", "tsReturn": "StringVector", "op": "primGetVariantSetNames" },
         { "jsName": "GetVariantNames", "tsArgs": [{ "name": "variantSetName", "type": "string" }], "tsReturn": "StringVector", "op": "primGetVariantNames" },
-        { "jsName": "DefinePrimInVariant", "tsArgs": [{ "name": "variantSetName", "type": "string" }, { "name": "variantName", "type": "string" }, { "name": "path", "type": "string" }, { "name": "typeName", "type": "string" }], "tsReturn": "USDPrim", "op": "primDefinePrimInVariant" }
+        { "jsName": "DefinePrimInVariant", "tsArgs": [{ "name": "variantSetName", "type": "string" }, { "name": "variantName", "type": "string" }, { "name": "path", "type": "string" }, { "name": "typeName", "type": "string" }], "tsReturn": "USDPrim", "op": "primDefinePrimInVariant" },
+        {"jsName": "SetMetadata", "tsArgs": [{"name": "key", "type": "string"}, {"name": "value", "type": "unknown"}], "tsReturn": "boolean", "op": "direct", "cpp": "emscripten::optional_override([](pxr::UsdPrim const& self, std::string const& key, emscripten::val value) { return _SetObjectMetadata(self, key, value); })"},
+        {"jsName": "AddReference", "tsArgs": [{"name": "assetPath", "type": "string"}, {"name": "primPath", "type": "string"}], "tsReturn": "boolean", "tsMayAsync": true, "op": "direct", "cpp": "emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& assetPath, std::string const& primPath) { return prim.GetReferences().AddReference(assetPath, pxr::SdfPath(primPath)); })"},
+        {"jsName": "SetInstanceable", "tsArgs": [{"name": "instanceable", "type": "boolean"}], "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::SetInstanceable"},
+        {"jsName": "GetVariantEditTarget", "tsArgs": [{"name": "variantSetName", "type": "string"}], "tsReturn": "USDEditTarget", "op": "direct", "cpp": "emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& name) { return prim.GetVariantSet(name).GetVariantEditTarget(); })"}
       ]
     },
     {
@@ -146,7 +155,9 @@
         { "jsName": "GetUpAxis", "tsReturn": "number", "op": "stageUpAxis" },
         { "jsName": "SetUpAxis", "tsArgs": [{ "name": "upAxis", "type": "string" }], "tsReturn": "boolean", "op": "stageSetUpAxis" },
         { "jsName": "Export", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "boolean", "op": "stageExport" },
-        { "jsName": "ExportToString", "tsReturn": "string", "op": "stageExportToString" }
+        { "jsName": "ExportToString", "tsReturn": "string", "op": "stageExportToString" },
+        {"jsName": "GetEditTarget", "tsArgs": [], "tsReturn": "USDEditTarget", "op": "direct", "cpp": "emscripten::optional_override([](pxr::UsdStage const& stage) { return stage.GetEditTarget(); })"},
+        {"jsName": "SetEditTarget", "tsArgs": [{"name": "target", "type": "USDEditTarget"}], "tsReturn": "void", "op": "direct", "cpp": "&pxr::UsdStage::SetEditTarget"}
       ]
     }
   ],

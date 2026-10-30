@@ -25,3 +25,17 @@ python3 pxr/usdImaging/hdEmscripten/bindgen/generate_bindings.py \
 ```
 
 CMake runs the same command automatically before compiling `emHdBindings`.
+
+Array setters accept JavaScript arrays of `GfMatrix4d` objects, flat 16-number
+row-major matrices or four rows of four numbers, and quaternion arrays in
+`[real, x, y, z]` order (`quatf`, `quatd`, `quath`). Half-precision scales use
+`half3[]`. `SetMetadata(key, value)` converts using the Sdf field definition, so
+primvar interpolation remains a token and elementSize remains an integer.
+Unsupported value types and malformed matrices/quaternions throw TypeError.
+
+`Prim.AddReference(assetPath, primPath)` and `SetInstanceable(bool)` author
+composition through USD. `Layer.GetSubLayerPaths/SetSubLayerPaths` inspect and
+replace the ordered sublayer list. Stage edit targets and a prim's selected
+variant edit target are exposed so callers can scope both definitions and
+attribute values to a variant. Restore the previous edit target in a finally
+block before yielding to unrelated authoring work.
