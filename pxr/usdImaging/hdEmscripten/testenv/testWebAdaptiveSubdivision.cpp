@@ -1,16 +1,20 @@
 // Focused native test: compile against an installed OpenUSD (pxOsd, vt, gf,
 // tf and OpenSubdiv osdCPU with Bfr); no wasm rebuild.
 #include "../webAdaptiveSubdivision.h"
+#include "../webMeshInvalidation.h"
 #include "pxr/imaging/pxOsd/meshTopology.h"
 #include "pxr/imaging/pxOsd/subdivTags.h"
 #include "pxr/imaging/pxOsd/tokens.h"
+#include <opensubdiv/far/primvarRefiner.h>
 // Checks call the code under test; keep them in release configurations.
 #undef NDEBUG
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <iostream>
 #include <map>
 #include <utility>
+#include <vector>
 
 PXR_NAMESPACE_USING_DIRECTIVE
 
@@ -214,8 +218,9 @@ _TestFlatBilinearGrid()
     assert(adaptive.GetNumPoints() == 6);
 }
 
-void
-_TestSharpCreaseNormals()
+// Every cube edge creased with the given sharpness.
+PxOsdMeshTopology
+_CreasedCube(float sharpness)
 {
     PxOsdMeshTopology topology = _Cube(PxOsdOpenSubdivTokens->catmullClark);
     auto initial = PxOsdRefinerFactory::Create(topology, TfToken());
@@ -229,8 +234,14 @@ _TestSharpCreaseNormals()
     PxOsdSubdivTags tags;
     tags.SetCreaseIndices(creaseIndices);
     tags.SetCreaseLengths(VtIntArray(base.GetNumEdges(), 2));
-    tags.SetCreaseWeights(VtFloatArray(base.GetNumEdges(), 10.0f));
-    const auto refiner = PxOsdRefinerFactory::Create(topology.WithSubdivTags(tags), TfToken());
+    tags.SetCreaseWeights(VtFloatArray(base.GetNumEdges(), sharpness));
+    return topology.WithSubdivTags(tags);
+}
+
+void
+_TestSharpCreaseNormals()
+{
+    const auto refiner = PxOsdRefinerFactory::Create(_CreasedCube(10.0f), TfToken());
     Adaptive adaptive;
     assert(adaptive.Build(refiner, _CubePoints().data(), 8, Adaptive::Settings()));
     VtVec3fArray points, vertexNormals, cornerNormals;
@@ -267,6 +278,98 @@ _TestAsymmetricBudget()
     }
 }
 
+void
+_TestMeshInvalidation()
+{
+    using Invalidation = HdEmscriptenMeshInvalidation;
+    assert(!Invalidation().DisplayTopologyDirty());
+    assert(Invalidation().GeomSubsetsDirty(true));
+
+    // Uniform points-only frames keep refinement, triangles and sections.
+    Invalidation uniformPoints;
+    uniformPoints.points = true;
+    assert(!uniformPoints.DisplayTopologyDirty());
+    assert(!uniformPoints.GeomSubsetsDirty(false));
+
+    // Adaptive patterns follow the points; sections index their triangles.
+    Invalidation adaptivePoints = uniformPoints;
+    adaptivePoints.adaptive = true;
+    assert(adaptivePoints.DisplayTopologyDirty());
+    assert(adaptivePoints.GeomSubsetsDirty(false));
+
+    // Animated tags and holes, detail level and repr rebuild either path.
+    for (bool adaptive : {false, true}) {
+        for (int flag = 0; flag < 4; ++flag) {
+            Invalidation invalidation;
+            invalidation.adaptive = adaptive;
+            invalidation.topology = flag == 0;
+            invalidation.subdivTags = flag == 1;
+            invalidation.displayStyle = flag == 2;
+            invalidation.repr = flag == 3;
+            assert(invalidation.DisplayTopologyDirty());
+            assert(invalidation.GeomSubsetsDirty(false));
+        }
+    }
+}
+
+struct _Vertex {
+    float p[3] = {0.0f, 0.0f, 0.0f};
+    void Clear(void * = nullptr) { p[0] = p[1] = p[2] = 0.0f; }
+    void AddWithWeight(_Vertex const &src, float weight) {
+        for (int k = 0; k < 3; ++k) p[k] += src.p[k] * weight;
+    }
+};
+
+std::vector<float>
+_RefineUniform(PxOsdTopologyRefinerSharedPtr const &refiner,
+               std::vector<float> const &points, int level)
+{
+    std::vector<_Vertex> vertices(refiner->GetNumVerticesTotal());
+    for (int i = 0; i < refiner->GetLevel(0).GetNumVertices(); ++i) {
+        std::copy_n(&points[3 * i], 3, vertices[i].p);
+    }
+    OpenSubdiv::Far::PrimvarRefiner primvarRefiner(*refiner);
+    _Vertex *src = vertices.data();
+    for (int l = 1; l <= level; ++l) {
+        _Vertex *dst = src + refiner->GetLevel(l - 1).GetNumVertices();
+        primvarRefiner.Interpolate(l, src, dst);
+        src = dst;
+    }
+    std::vector<float> refined;
+    for (int i = 0; i < refiner->GetLevel(level).GetNumVertices(); ++i) {
+        refined.insert(refined.end(), src[i].p, src[i].p + 3);
+    }
+    return refined;
+}
+
+PxOsdTopologyRefinerSharedPtr
+_UniformRefiner(PxOsdMeshTopology const &topology, int level)
+{
+    auto refiner = PxOsdRefinerFactory::Create(topology, TfToken());
+    OpenSubdiv::Far::TopologyRefiner::UniformOptions options(level);
+    options.fullTopologyInLastLevel = true;
+    refiner->RefineUniform(options);
+    return refiner;
+}
+
+// Points-only frames reuse the uniform refiner: its weights depend only on
+// topology and tags, so a kept refiner refines deformed points exactly like
+// a new one, while animated crease sharpness must rebuild it.
+void
+_TestUniformRefinerReuseAcrossPoints()
+{
+    const int level = 2;
+    const auto kept = _UniformRefiner(_CreasedCube(0.5f), level);
+    auto deformed = _CubePoints();
+    deformed[0] -= 0.3f; deformed[13] += 0.4f; deformed[23] -= 0.2f;
+    assert(_RefineUniform(kept, deformed, level) ==
+           _RefineUniform(_UniformRefiner(_CreasedCube(0.5f), level),
+                          deformed, level));
+    assert(_RefineUniform(kept, deformed, level) !=
+           _RefineUniform(_UniformRefiner(_CreasedCube(4.0f), level),
+                          deformed, level));
+}
+
 } // namespace
 
 int main()
@@ -278,6 +381,8 @@ int main()
     _TestFlatBilinearGrid();
     _TestSharpCreaseNormals();
     _TestAsymmetricBudget();
+    _TestMeshInvalidation();
+    _TestUniformRefinerReuseAcrossPoints();
     std::cout << "testWebAdaptiveSubdivision OK" << std::endl;
     return 0;
 }

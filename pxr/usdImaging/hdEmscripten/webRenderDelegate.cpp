@@ -24,6 +24,7 @@
 #include "webRenderDelegate.h"
 #include "webAdaptiveSubdivision.h"
 #include "webMdlMaterial.h"
+#include "webMeshInvalidation.h"
 #include "pxr/usdImaging/usdImaging/materialParamUtils.h"
 #include "pxr/base/gf/vec2f.h"
 #include "pxr/base/vt/typeHeaders.h"
@@ -675,8 +676,12 @@ public:
             auto materialId = delegate->GetMaterialId(id);
 
             if (materialId.IsEmpty()){
+                // The scene delegate provides subdiv tags separately; keep
+                // them when the material change refetches the topology.
+                PxOsdSubdivTags subdivTags = _topology.GetSubdivTags();
                 int refineLevel = _topology.GetRefineLevel();
                 _topology = HdMeshTopology(delegate->GetMeshTopology(id), refineLevel);
+                _topology.SetSubdivTags(subdivTags);
                 fetchedTopology = true;
 
             }
@@ -729,17 +734,24 @@ public:
             _topology.SetSubdivTags(delegate->GetSubdivTags(id));
         }
 
-        const bool displayTopologyDirty =
-            topologyDirty || subdivTagsDirty || displayStyleDirty || reprDirty ||
-            (pointsDirty && _UseAdaptiveTessellation());
+        HdEmscriptenMeshInvalidation invalidation;
+        invalidation.topology = topologyDirty;
+        invalidation.subdivTags = subdivTagsDirty;
+        invalidation.displayStyle = displayStyleDirty;
+        invalidation.repr = reprDirty;
+        invalidation.points = pointsDirty;
+        invalidation.adaptive = _UseAdaptiveTessellation();
+        const bool displayTopologyDirty = invalidation.DisplayTopologyDirty();
         if (pointsDirty || displayTopologyDirty) {
             _UpdateDisplayGeometry(displayTopologyDirty);
             _normalsValid = false;
-            _adjacencyValid = false;
+            if (displayTopologyDirty) {
+                _adjacencyValid = false;
+            }
         }
 
-        if ((*dirtyBits & HdChangeTracker::DirtyMaterialId) ||
-            topologyDirty || subdivTagsDirty || displayStyleDirty || reprDirty) {
+        if (invalidation.GeomSubsetsDirty(
+                *dirtyBits & HdChangeTracker::DirtyMaterialId)) {
             _UpdateGeomSubsetMaterials(delegate);
         }
 
@@ -1582,19 +1594,33 @@ private:
         return true;
     }
 
+    // Refreshes the display points on the current display topology. Returns
+    // false when that topology cannot serve the new points and must be rebuilt.
+    bool _RefreshDisplayPoints()
+    {
+        if (!_meshUtil || _points.empty() || _usingAdaptiveTessellation) {
+            return false;
+        }
+        if (!_usingRefinedTopology) {
+            return _GetEffectiveRefineLevel() <= 0 ||
+                _topology.GetScheme() == PxOsdOpenSubdivTokens->none;
+        }
+        return _topologyRefiner && _InterpolateSubdivisionPoints(
+            _topologyRefiner, _GetEffectiveRefineLevel(), &_displayPoints);
+    }
+
     void _UpdateDisplayGeometry(bool displayTopologyDirty)
     {
         _HdEmscriptenScopedTimer timer(
             std::string("_UpdateDisplayGeometry ") + GetId().GetString());
-        _BuildRefinedTopology(displayTopologyDirty);
-        const HdMeshTopology &displayTopology = _GetDisplayTopology();
-        const VtVec3fArray &displayPoints = _GetDisplayPoints();
-
-        if (_meshUtil != NULL) {
-            delete _meshUtil;
-        }
-        _meshUtil = new HdMeshUtil(&displayTopology, GetId());
-        {
+        // Points-only updates keep the uniform refiner, display topology
+        // and triangulation; only the display points are refreshed.
+        if (displayTopologyDirty || !_RefreshDisplayPoints()) {
+            _BuildRefinedTopology(displayTopologyDirty);
+            if (_meshUtil != NULL) {
+                delete _meshUtil;
+            }
+            _meshUtil = new HdMeshUtil(&_GetDisplayTopology(), GetId());
             _HdEmscriptenScopedTimer triangleTimer(
                 std::string("_UpdateDisplayGeometry ComputeTriangleIndices ") +
                 GetId().GetString());
@@ -1602,6 +1628,7 @@ private:
                 &_triangulatedIndices, &_trianglePrimitiveParams);
             _RemapPrimitiveParamsToCoarseFaces();
         }
+        const VtVec3fArray &displayPoints = _GetDisplayPoints();
 
         _rPrim.With([&](val& rPrim) {
             _HdEmscriptenScopedTimer publishTimer(
@@ -2007,6 +2034,11 @@ private:
                         primVarNum < numPrimVars;
                     ++primVarNum) {
                 HdPrimvarDescriptor const &primvar = primvars[primVarNum];
+                if (primvar.name == HdTokens->points) {
+                    // _UpdateDisplayGeometry publishes refined points; the
+                    // primvar copy would refine them again for nothing.
+                    continue;
+                }
                 if (primvar.name == HdTokens->normals &&
                     (_ForceFlatNormals() || _UseSmoothNormals())) {
                     // Match Storm's normal source precedence: generated flat,
