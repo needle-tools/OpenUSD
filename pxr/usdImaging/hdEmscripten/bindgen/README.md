@@ -45,3 +45,8 @@ nested numeric arrays for vectors, matrices, quaternions and their arrays.
 Pass NaN for the default value. Unset values return undefined; GetValueString
 remains available for display. Material transport reuses the same conversion.
 Use `await Attribute.Get(timeCode)` when a sampled value may open a remote value clip.
+
+Numeric two- and four-component vectors, integer vectors and their arrays can
+be authored as component arrays. UV (`texCoord2f[]`, `texCoord2d[]`) and color4
+roles preserve their USD type. Wrong dimensions, non-finite values, overflow and
+fractional integer components throw TypeError. Bool arrays take booleans.
