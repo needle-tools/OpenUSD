@@ -778,7 +778,7 @@ public:
         // 2. If the points are dirty, update the smooth normal buffer itself.
         if (_smoothNormals && !_adjacencyValid &&
             !_usingAdaptiveTessellation) {
-            _adjacency.BuildAdjacencyTable(&_topology);
+            _adjacency.BuildAdjacencyTable(&_GetDisplayTopology());
             _adjacencyValid = true;
             // If we rebuilt the adjacency table, force a rebuild of normals.
             _normalsValid = false;
@@ -793,26 +793,12 @@ public:
             });
         }
         else if (_smoothNormals && !_normalsValid) {
-            VtVec3fArray coarseNormals = Hd_SmoothNormals::ComputeSmoothNormals(
-                &_adjacency, _points.size(), _points.cdata());
-            if (_usingRefinedTopology &&
-                !_RefineVertexOrVaryingPrimvar<GfVec3f>(
-                    coarseNormals,
-                    &_computedNormals,
-                    HdInterpolationVertex)) {
-                TF_WARN("Could not refine smooth normals for <%s>.",
-                    GetId().GetText());
-                Hd_VertexAdjacency displayAdjacency;
-                const HdMeshTopology &displayTopology = _GetDisplayTopology();
-                const VtVec3fArray &displayPoints = _GetDisplayPoints();
-                displayAdjacency.BuildAdjacencyTable(&displayTopology);
-                _computedNormals = Hd_SmoothNormals::ComputeSmoothNormals(
-                    &displayAdjacency,
-                    displayPoints.size(),
-                    displayPoints.cdata());
-            } else if (!_usingRefinedTopology) {
-                _computedNormals = coarseNormals;
-            }
+            // Normals are derivatives of the refined surface, not a primvar
+            // that can be interpolated from coarse-cage normals. Refining the
+            // latter bends highlights across otherwise planar creased faces.
+            const VtVec3fArray &displayPoints = _GetDisplayPoints();
+            _computedNormals = Hd_SmoothNormals::ComputeSmoothNormals(
+                &_adjacency, displayPoints.size(), displayPoints.cdata());
             _normalsValid = true;
             _rPrim.With([&](val& rPrim) {
                 rPrim.call<void>("updateNormals", val(typed_memory_view(3 * _computedNormals.size(), reinterpret_cast<float*>(_computedNormals.data()))));
