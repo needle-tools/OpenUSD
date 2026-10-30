@@ -319,6 +319,20 @@ def _lambda(cpp_type: str, method: dict) -> tuple[str, bool]:
       pxr::UsdEditContext context(variantSet.GetVariantEditContext());
       return prim.GetStage()->DefinePrim(pxr::SdfPath(path), pxr::TfToken(typeName));
     })""", False
+    if op == "stageOpenLayerStage":
+        return """emscripten::optional_override([](pxr::UsdStage& stage, std::string const& identifier) -> pxr::UsdStage* {
+      auto layers = stage.GetUsedLayers(true);
+      for (auto const& layer : stage.GetLayerStack(true)) layers.push_back(layer);
+      for (auto const& layer : layers) {
+        if (layer && layer->GetIdentifier() == identifier) {
+          auto opened = pxr::UsdStage::Open(layer, stage.GetPathResolverContext(), pxr::UsdStage::LoadNone);
+          if (!opened) return nullptr;
+          _StageRegistry().push_back(opened);
+          return opened.operator->();
+        }
+      }
+      return nullptr;
+    })""", True
     if op == "stageRootLayerPointer":
         return """emscripten::optional_override([](pxr::UsdStage& stage) {
       return get_pointer(stage.GetRootLayer());
