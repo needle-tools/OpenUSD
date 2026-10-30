@@ -24,6 +24,7 @@
 
 #include "webRenderDelegate.h"
 #include "webPhysics.h"
+#include "webStageExport.h"
 #include "pxr/imaging/hd/unitTestNullRenderPass.h"
 #include <emscripten/bind.h>
 #include "pxr/usd/usdSkel/bakeSkinning.h"
@@ -308,6 +309,36 @@ public:
         return _drawPending.load();
     }
 
+    bool ExportUsdzAsync(std::string const& directory, emscripten::val resolve,
+                        emscripten::val reject, emscripten::val progress) {
+        bool expected = false;
+        if (!_stage || _drawPending.load() ||
+            !_exportPending.compare_exchange_strong(expected, true)) return false;
+        std::thread([this, stage = _stage, directory, resolve, reject, progress]() mutable {
+            std::string error, previous;
+            auto last = std::chrono::steady_clock::now();
+            try {
+                ArResolverContextBinder binder(stage->GetPathResolverContext());
+                WebExportStagePackage(stage, directory, [&](std::string const& phase, size_t completed, size_t total) {
+                    auto now = std::chrono::steady_clock::now();
+                    if (phase == previous && completed != total &&
+                        std::chrono::duration<double, std::milli>(now - last).count() < 50) return;
+                    previous = phase; last = now;
+                    runInMainThread([progress, phase, completed, total]() mutable {
+                        progress(emscripten::val(phase), double(completed), double(total));
+                    });
+                });
+            } catch (std::exception const& e) { error = e.what(); }
+              catch (...) { error = "Unknown USD export failure"; }
+            _exportPending.store(false);
+            runInMainThread([resolve, reject, error]() mutable {
+                if (error.empty()) resolve(emscripten::val::undefined());
+                else reject(emscripten::val(error));
+            });
+        }).detach();
+        return true;
+    }
+
     std::string ConsumeDrawError() {
         std::lock_guard<std::mutex> lock(_drawErrorMutex);
         std::string error = _drawError;
@@ -558,6 +589,7 @@ private:
     TfTokenVector _renderTags;
     float _complexity;
     std::atomic<bool> _drawPending{false};
+    std::atomic<bool> _exportPending{false};
     std::mutex _drawErrorMutex;
     std::string _drawError;
 

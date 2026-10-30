@@ -99,6 +99,7 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
     .constructor<emscripten::val, std::string>()
     .function("Draw", &pxr::HdWebSyncDriver::Draw, async())
     .function("DrawAsync", &pxr::HdWebSyncDriver::DrawAsync)
+    .function("ExportUsdzAsync", &pxr::HdWebSyncDriver::ExportUsdzAsync)
     .function("StartDraw", &pxr::HdWebSyncDriver::StartDraw)
     .function("IsDrawPending", &pxr::HdWebSyncDriver::IsDrawPending)
     .function("ConsumeDrawError", &pxr::HdWebSyncDriver::ConsumeDrawError)
