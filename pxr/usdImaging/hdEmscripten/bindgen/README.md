@@ -50,3 +50,8 @@ Numeric two- and four-component vectors, integer vectors and their arrays can
 be authored as component arrays. UV (`texCoord2f[]`, `texCoord2d[]`) and color4
 roles preserve their USD type. Wrong dimensions, non-finite values, overflow and
 fractional integer components throw TypeError. Bool arrays take booleans.
+
+`await stage.OpenLayerStage(identifier)` opens a stage over an existing used or
+local-stack layer, preserving its exact layer identity and resolver context. It
+does not reopen an asset URL. Payloads start unloaded. Release the owned result
+with `USD.ReleaseStage`; null means the layer is not part of the stage.

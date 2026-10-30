@@ -136,6 +136,7 @@
       "jsName": "Stage",
       "tsName": "USDStage",
       "methods": [
+        { "jsName": "OpenLayerStage", "tsArgs": [{ "name": "identifier", "type": "string" }], "tsReturn": "USDStage | null", "tsMayAsync": true, "op": "stageOpenLayerStage" },
         { "jsName": "GetRootLayer", "tsReturn": "USDLayer", "op": "stageRootLayerPointer" },
         { "jsName": "GetPseudoRoot", "tsReturn": "USDPrim", "op": "direct", "cpp": "&pxr::UsdStage::GetPseudoRoot" },
         { "jsName": "GetPrimAtPath", "tsArgs": [{ "name": "path", "type": "string" }], "tsReturn": "USDPrim", "op": "stageGetPrimAtPath" },
