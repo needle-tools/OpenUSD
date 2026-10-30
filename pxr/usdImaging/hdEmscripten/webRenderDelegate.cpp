@@ -22,6 +22,7 @@
 // language governing permissions and limitations under the Apache License.
 //
 #include "webRenderDelegate.h"
+#include "webValue.h"
 #include "webAdaptiveSubdivision.h"
 #include "webMdlMaterial.h"
 #include "webMeshInvalidation.h"
@@ -250,31 +251,7 @@ std::string _CullStyleToString(HdCullStyle cullStyle)
     return "dontCare";
 }
 
-template <class Vec>
-emscripten::val _GfVecToJsVal(Vec const &vec)
-{
-    emscripten::val jsArray = emscripten::val::array();
-    for (size_t i = 0; i < Vec::dimension; ++i) {
-        jsArray.set(i, vec[i]);
-    }
-    return jsArray;
-}
-
-template <class T>
-emscripten::val _ValueToJsVal(T const &value)
-{
-    return emscripten::val(value);
-}
-
-emscripten::val _ValueToJsVal(TfToken const &value)
-{
-    return emscripten::val(value.GetString());
-}
-
-emscripten::val _ValueToJsVal(SdfAssetPath const &value)
-{
-    return emscripten::val(value.GetAssetPath());
-}
+using namespace pxr::hdEmscriptenValues;
 
 emscripten::val _MatrixToJsVal(GfMatrix4f const& matrix)
 {
@@ -282,83 +259,6 @@ emscripten::val _MatrixToJsVal(GfMatrix4f const& matrix)
         emscripten::typed_memory_view(16, reinterpret_cast<float const*>(matrix.data())));
 }
 
-template <class T>
-emscripten::val _VtArrayToJsVal(VtArray<T> const &array)
-{
-    emscripten::val jsArray = emscripten::val::array();
-    for (size_t i = 0; i < array.size(); ++i) {
-        jsArray.set(i, _ValueToJsVal(array[i]));
-    }
-    return jsArray;
-}
-
-emscripten::val _VtValueToJsVal(VtValue const &value)
-{
-    if (value.IsHolding<VtDictionary>()) {
-        val object = val::object();
-        for (auto const &entry : value.UncheckedGet<VtDictionary>()) {
-            object.set(entry.first, _VtValueToJsVal(entry.second));
-        }
-        return object;
-    }
-#define HD_EMSCRIPTEN_CONVERT_SCALAR(T) \
-    if (value.IsHolding<T>()) { \
-        return _ValueToJsVal(value.UncheckedGet<T>()); \
-    }
-
-#define HD_EMSCRIPTEN_CONVERT_VEC(T) \
-    if (value.IsHolding<T>()) { \
-        return _GfVecToJsVal(value.UncheckedGet<T>()); \
-    }
-
-#define HD_EMSCRIPTEN_CONVERT_ARRAY(T) \
-    if (value.IsHolding<VtArray<T>>()) { \
-        return _VtArrayToJsVal(value.UncheckedGet<VtArray<T>>()); \
-    }
-
-    HD_EMSCRIPTEN_CONVERT_SCALAR(bool)
-    HD_EMSCRIPTEN_CONVERT_SCALAR(int)
-    HD_EMSCRIPTEN_CONVERT_SCALAR(float)
-    HD_EMSCRIPTEN_CONVERT_SCALAR(double)
-    HD_EMSCRIPTEN_CONVERT_SCALAR(std::string)
-    HD_EMSCRIPTEN_CONVERT_SCALAR(TfToken)
-    HD_EMSCRIPTEN_CONVERT_SCALAR(SdfAssetPath)
-
-    HD_EMSCRIPTEN_CONVERT_VEC(GfVec2f)
-    HD_EMSCRIPTEN_CONVERT_VEC(GfVec3f)
-    HD_EMSCRIPTEN_CONVERT_VEC(GfVec4f)
-    HD_EMSCRIPTEN_CONVERT_VEC(GfVec2d)
-    HD_EMSCRIPTEN_CONVERT_VEC(GfVec3d)
-    HD_EMSCRIPTEN_CONVERT_VEC(GfVec4d)
-    HD_EMSCRIPTEN_CONVERT_VEC(GfVec2i)
-    HD_EMSCRIPTEN_CONVERT_VEC(GfVec3i)
-    HD_EMSCRIPTEN_CONVERT_VEC(GfVec4i)
-
-    HD_EMSCRIPTEN_CONVERT_ARRAY(bool)
-    HD_EMSCRIPTEN_CONVERT_ARRAY(int)
-    HD_EMSCRIPTEN_CONVERT_ARRAY(float)
-    HD_EMSCRIPTEN_CONVERT_ARRAY(double)
-    HD_EMSCRIPTEN_CONVERT_ARRAY(std::string)
-    HD_EMSCRIPTEN_CONVERT_ARRAY(TfToken)
-    HD_EMSCRIPTEN_CONVERT_ARRAY(SdfAssetPath)
-    HD_EMSCRIPTEN_CONVERT_ARRAY(GfVec2f)
-    HD_EMSCRIPTEN_CONVERT_ARRAY(GfVec3f)
-    HD_EMSCRIPTEN_CONVERT_ARRAY(GfVec4f)
-    HD_EMSCRIPTEN_CONVERT_ARRAY(GfVec2d)
-    HD_EMSCRIPTEN_CONVERT_ARRAY(GfVec3d)
-    HD_EMSCRIPTEN_CONVERT_ARRAY(GfVec4d)
-    HD_EMSCRIPTEN_CONVERT_ARRAY(GfVec2i)
-    HD_EMSCRIPTEN_CONVERT_ARRAY(GfVec3i)
-    HD_EMSCRIPTEN_CONVERT_ARRAY(GfVec4i)
-
-#undef HD_EMSCRIPTEN_CONVERT_ARRAY
-#undef HD_EMSCRIPTEN_CONVERT_VEC
-#undef HD_EMSCRIPTEN_CONVERT_SCALAR
-
-    TF_WARN("Unsupported material parameter type '%s'",
-        ArchGetDemangled(value.GetTypeid()).c_str());
-    return emscripten::val::undefined();
-}
 
 class Emscripten_Instancer final : public HdInstancer {
 public:

@@ -1,6 +1,7 @@
 #include "pxr/pxr.h"
 
 #include "webSyncDriver.h"
+#include "webValue.h"
 #include "generated/openusdBuildInfo.h"
 
 #include "pxr/base/tf/stringUtils.h"

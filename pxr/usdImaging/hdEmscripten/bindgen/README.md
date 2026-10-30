@@ -39,3 +39,9 @@ replace the ordered sublayer list. Stage edit targets and a prim's selected
 variant edit target are exposed so callers can scope both definitions and
 attribute values to a variant. Restore the previous edit target in a finally
 block before yielding to unrelated authoring work.
+
+`Attribute.Get(timeCode)` returns owned JavaScript values: scalars, strings and
+nested numeric arrays for vectors, matrices, quaternions and their arrays.
+Pass NaN for the default value. Unset values return undefined; GetValueString
+remains available for display. Material transport reuses the same conversion.
+Use `await Attribute.Get(timeCode)` when a sampled value may open a remote value clip.
