@@ -1,6 +1,8 @@
 #ifndef HD_EMSCRIPTEN_WEB_STAGE_EXPORT_H
 #define HD_EMSCRIPTEN_WEB_STAGE_EXPORT_H
 
+#include "pxr/base/tf/stringUtils.h"
+#include "pxr/usd/sdf/assetPath.h"
 #include "pxr/usd/ar/packageUtils.h"
 #include "pxr/usd/ar/resolver.h"
 #include "pxr/usd/sdf/zipFile.h"
@@ -13,6 +15,7 @@
 #include <map>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 PXR_NAMESPACE_OPEN_SCOPE
 
