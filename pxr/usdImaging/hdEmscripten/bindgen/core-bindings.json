@@ -1,6 +1,6 @@
 {
   "classes": [
-    {"cppType": "pxr::UsdEditTarget", "jsName": "EditTarget", "tsName": "USDEditTarget", "methods": [{"jsName": "IsValid", "tsArgs": [], "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdEditTarget::IsValid"}]},
+    {"cppType": "pxr::UsdEditTarget", "jsName": "EditTarget", "tsName": "USDEditTarget", "tsDelete": true, "methods": [{"jsName": "IsValid", "tsArgs": [], "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdEditTarget::IsValid"}]},
     {
       "cppType": "pxr::SdfLayer",
       "jsName": "Layer",
@@ -87,7 +87,7 @@
         { "jsName": "HasAuthoredMetadata", "tsArgs": [{ "name": "key", "type": "string" }], "tsReturn": "boolean", "op": "objectHasAuthoredMetadata" },
         { "jsName": "GetSpecifier", "tsReturn": "string", "op": "primGetSpecifier" },
         { "jsName": "IsActive", "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::IsActive" },
-        { "jsName": "SetActive", "tsArgs": [{ "name": "active", "type": "boolean" }], "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::SetActive" },
+        { "jsName": "SetActive", "tsArgs": [{ "name": "active", "type": "boolean" }], "tsReturn": "boolean", "tsMayAsync": true, "op": "direct", "cpp": "&pxr::UsdPrim::SetActive" },
         { "jsName": "ApplyAPI", "tsArgs": [{ "name": "schemaIdentifier", "type": "string" }], "tsReturn": "boolean", "op": "primApplyAPI" },
         { "jsName": "IsDefined", "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::IsDefined" },
         { "jsName": "IsAbstract", "tsReturn": "boolean", "op": "primIsAbstract" },
@@ -124,9 +124,9 @@
         { "jsName": "GetVariantSetNames", "tsReturn": "StringVector", "op": "primGetVariantSetNames" },
         { "jsName": "GetVariantNames", "tsArgs": [{ "name": "variantSetName", "type": "string" }], "tsReturn": "StringVector", "op": "primGetVariantNames" },
         { "jsName": "DefinePrimInVariant", "tsArgs": [{ "name": "variantSetName", "type": "string" }, { "name": "variantName", "type": "string" }, { "name": "path", "type": "string" }, { "name": "typeName", "type": "string" }], "tsReturn": "USDPrim", "op": "primDefinePrimInVariant" },
-        {"jsName": "SetMetadata", "tsArgs": [{"name": "key", "type": "string"}, {"name": "value", "type": "unknown"}], "tsReturn": "boolean", "op": "direct", "cpp": "emscripten::optional_override([](pxr::UsdPrim const& self, std::string const& key, emscripten::val value) { return _SetObjectMetadata(self, key, value); })"},
+        {"jsName": "SetMetadata", "tsArgs": [{"name": "key", "type": "string"}, {"name": "value", "type": "unknown"}], "tsReturn": "boolean", "tsMayAsync": true, "op": "direct", "cpp": "emscripten::optional_override([](pxr::UsdPrim const& self, std::string const& key, emscripten::val value) { return _SetObjectMetadata(self, key, value); })"},
         {"jsName": "AddReference", "tsArgs": [{"name": "assetPath", "type": "string"}, {"name": "primPath", "type": "string"}], "tsReturn": "boolean", "tsMayAsync": true, "op": "direct", "cpp": "emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& assetPath, std::string const& primPath) { return prim.GetReferences().AddReference(assetPath, pxr::SdfPath(primPath)); })"},
-        {"jsName": "SetInstanceable", "tsArgs": [{"name": "instanceable", "type": "boolean"}], "tsReturn": "boolean", "op": "direct", "cpp": "&pxr::UsdPrim::SetInstanceable"},
+        {"jsName": "SetInstanceable", "tsArgs": [{"name": "instanceable", "type": "boolean"}], "tsReturn": "boolean", "tsMayAsync": true, "op": "direct", "cpp": "&pxr::UsdPrim::SetInstanceable"},
         {"jsName": "GetVariantEditTarget", "tsArgs": [{"name": "variantSetName", "type": "string"}], "tsReturn": "USDEditTarget", "op": "direct", "cpp": "emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& name) { return prim.GetVariantSet(name).GetVariantEditTarget(); })"}
       ]
     },
