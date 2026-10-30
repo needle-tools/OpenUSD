@@ -53,7 +53,7 @@ getUsdModule({
   }
 
   const buildInfo = JSON.parse(USD.GetBuildInfoJson());
-  if (buildInfo.openusd?.version !== "0.26.5") {
+  if (buildInfo.openusd?.version !== "0.26.11") {
     throw new Error(`Unexpected OpenUSD version in build info: ${buildInfo.openusd?.version}`);
   }
   if (buildInfo.modules?.hydraBridge !== true) {
