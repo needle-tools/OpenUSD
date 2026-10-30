@@ -1,3 +1,5 @@
+#include <limits>
+#include <type_traits>
 #include "pxr/pxr.h"
 
 #include "webSyncDriver.h"
