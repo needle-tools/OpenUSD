@@ -370,10 +370,55 @@ _TestUniformRefinerReuseAcrossPoints()
                           deformed, level));
 }
 
+void
+_TestCollapsedConePoleNormals()
+{
+    constexpr int radial = 10;
+    VtIntArray counts, indices;
+    std::vector<float> cage = {0, 0, -1};
+    for (int ring = 0; ring < 3; ++ring) {
+        for (int i = 0; i < radial; ++i) {
+            const float angle = 2.0f * 3.14159265358979323846f * i / radial;
+            cage.push_back(ring == 2 ? 0 : std::cos(angle));
+            cage.push_back(ring == 2 ? 0 : std::sin(angle));
+            cage.push_back(ring == 2 ? 1 : -1);
+        }
+    }
+    for (int i = 0; i < radial; ++i) {
+        const int next = (i + 1) % radial;
+        counts.push_back(3);
+        for (int v : {0, next + 1, i + 1}) indices.push_back(v);
+    }
+    for (int i = 0; i < radial; ++i) {
+        const int next = (i + 1) % radial;
+        counts.push_back(4);
+        for (int v : {11+i, 11+next, 21+next, 21+i}) indices.push_back(v);
+    }
+    PxOsdMeshTopology topology(PxOsdOpenSubdivTokens->catmullClark,
+        PxOsdOpenSubdivTokens->rightHanded, counts, indices);
+    auto refiner = PxOsdRefinerFactory::Create(topology, TfToken());
+    Adaptive adaptive;
+    assert(adaptive.Build(refiner, cage.data(), 31, Adaptive::Settings()));
+    VtVec3fArray points, normals, corners;
+    assert(adaptive.EvaluatePositions(cage.data(), 31, &points, &normals, &corners));
+    VtIntArray tris, verts; std::vector<int> faces;
+    adaptive.GetTriangles(&tris, &verts, &faces);
+    int tips = 0;
+    for (size_t i = 0; i < verts.size(); ++i) {
+        if (points[verts[i]][2] < .99999f) continue;
+        // The cone rises towards the pole: its side normal needs positive Z.
+        assert(corners[i][2] > .2f);
+        assert(std::abs(corners[i].GetLength() - 1.0f) < 1e-4f);
+        ++tips;
+    }
+    assert(tips > 0);
+}
+
 } // namespace
 
 int main()
 {
+    _TestCollapsedConePoleNormals();
     _TestCatmarkCube();
     _TestLeftHandedNormals();
     _TestHolesAndFaceVarying();

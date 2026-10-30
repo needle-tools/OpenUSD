@@ -699,6 +699,7 @@ public:
             const VtVec3fArray &displayPoints = _GetDisplayPoints();
             _computedNormals = Hd_SmoothNormals::ComputeSmoothNormals(
                 &_adjacency, displayPoints.size(), displayPoints.cdata());
+            _RepairDegenerateSmoothNormals();
             _normalsValid = true;
             _rPrim.With([&](val& rPrim) {
                 rPrim.call<void>("updateNormals", val(typed_memory_view(3 * _computedNormals.size(), reinterpret_cast<float*>(_computedNormals.data()))));
@@ -1309,6 +1310,52 @@ private:
             }
         }
         return true;
+    }
+
+    void _RepairDegenerateSmoothNormals()
+    {
+        // A cone apex is a ring of coincident vertices. Corner-edge cross
+        // products vanish there even though each incident polygon has area.
+        const auto missing = [](GfVec3f const &n) {
+            return !std::isfinite(n.GetLengthSq()) || n.GetLengthSq() < 1e-12f;
+        };
+        if (std::none_of(_computedNormals.begin(), _computedNormals.end(), missing)) {
+            return;
+        }
+        const VtVec3fArray &points = _GetDisplayPoints();
+        auto const &topology = _GetDisplayTopology();
+        auto const &counts = topology.GetFaceVertexCounts();
+        auto const &indices = topology.GetFaceVertexIndices();
+        auto const &holes = topology.GetHoleIndices();
+        VtVec3fArray sums(points.size(), GfVec3f(0.0f));
+        size_t offset = 0;
+        for (size_t face = 0; face < counts.size(); ++face) {
+            const int count = counts[face];
+            if (count >= 3 && offset + count <= indices.size() &&
+                std::find(holes.begin(), holes.end(), static_cast<int>(face)) == holes.end()) {
+                bool valid = true;
+                for (int c = 0; c < count; ++c) {
+                    const int index = indices[offset + c];
+                    valid &= index >= 0 && static_cast<size_t>(index) < points.size();
+                }
+                if (valid) {
+                    GfVec3f area(0.0f);
+                    const GfVec3f origin = points[indices[offset]];
+                    for (int c = 1; c + 1 < count; ++c) {
+                        area += GfCross(points[indices[offset+c]] - origin,
+                                        points[indices[offset+c+1]] - origin);
+                    }
+                    if (topology.GetOrientation() == PxOsdOpenSubdivTokens->leftHanded) area = -area;
+                    for (int c = 0; c < count; ++c) sums[indices[offset+c]] += area;
+                }
+            }
+            offset += std::max(0, count);
+        }
+        for (size_t i = 0; i < _computedNormals.size() && i < sums.size(); ++i) {
+            if (missing(_computedNormals[i]) && sums[i].Normalize() > 0.0f) {
+                _computedNormals[i] = sums[i];
+            }
+        }
     }
 
     void _UpdateFlatGeometricNormals()

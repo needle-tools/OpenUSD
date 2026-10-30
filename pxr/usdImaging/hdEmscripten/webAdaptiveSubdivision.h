@@ -178,6 +178,7 @@ public:
 
         Surface surface;
         std::vector<float> patchPoints;
+        std::vector<float> faceScales(_numCoarseFaces, 0.0f);
         for (int face = 0; face < _numCoarseFaces; ++face) {
             const int c0 = _faceCoordOffsets[face];
             const int c1 = _faceCoordOffsets[face + 1];
@@ -187,6 +188,16 @@ public:
             patchPoints.resize(surface.GetNumPatchPoints() * 3);
             surface.PreparePatchPoints(
                 points, PointDesc(3), patchPoints.data(), PointDesc(3));
+            GfVec3f patchMin(patchPoints[0], patchPoints[1], patchPoints[2]);
+            GfVec3f patchMax = patchMin;
+            for (size_t p = 3; p + 2 < patchPoints.size(); p += 3) {
+                for (int k = 0; k < 3; ++k) {
+                    patchMin[k] = std::min(patchMin[k], patchPoints[p+k]);
+                    patchMax[k] = std::max(patchMax[k], patchPoints[p+k]);
+                }
+            }
+            const float patchScale = (patchMax - patchMin).GetLengthSq();
+            faceScales[face] = patchScale;
             for (int c = c0; c < c1; ++c) {
                 float p[3], du[3], dv[3];
                 surface.Evaluate(&_coordUVs[2 * c], patchPoints.data(),
@@ -198,7 +209,12 @@ public:
                 GfVec3f normal = GfCross(GfVec3f(du[0], du[1], du[2]),
                                          GfVec3f(dv[0], dv[1], dv[2]));
                 const float length = normal.GetLength();
-                if (length > 0.0f && std::isfinite(length)) {
+                // At a collapsed pole, tiny derivative round-off is not a
+                // usable surface normal. Let the geometric fallback own it.
+                const float derivativeScale = std::max(
+                    GfVec3f(du[0], du[1], du[2]).GetLengthSq(),
+                    GfVec3f(dv[0], dv[1], dv[2]).GetLengthSq());
+                if (length > std::max(derivativeScale, patchScale) * 1e-6f && std::isfinite(length)) {
                     normal /= length;
                     normalSums[point] += normal;
                     if (outCornerNormals) coordNormals[c] = normal;
@@ -219,9 +235,11 @@ public:
                     const GfVec3f n = GfCross(
                         (*outPoints)[b] - (*outPoints)[a],
                         (*outPoints)[c] - (*outPoints)[a]);
-                    fallback[a] += n;
-                    fallback[b] += n;
-                    fallback[c] += n;
+                    if (n.GetLength() > faceScales[_triangleCoarseFaces[t]] * 1e-8f) {
+                        fallback[a] += n;
+                        fallback[b] += n;
+                        fallback[c] += n;
+                    }
                 }
                 break;
             }
@@ -247,7 +265,12 @@ public:
                 const int b = _coordPoints[_triangleCoords[3*t+1]];
                 const int c = _coordPoints[_triangleCoords[3*t+2]];
                 GfVec3f faceNormal = GfCross((*outPoints)[b]-(*outPoints)[a], (*outPoints)[c]-(*outPoints)[a]);
-                faceNormal.Normalize();
+                const float area = faceNormal.GetLength();
+                if (area > faceScales[_triangleCoarseFaces[t]] * 1e-8f && std::isfinite(area)) {
+                    faceNormal /= area;
+                } else {
+                    faceNormal = GfVec3f(0.0f);
+                }
                 for (int corner = 0; corner < 3; ++corner) {
                     const int coord = _triangleCoords[3*t+corner];
                     GfVec3f normal = coordNormals[coord];
