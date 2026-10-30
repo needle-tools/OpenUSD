@@ -94,6 +94,24 @@ getUsdModule({
     throw new Error("DefinePrim did not create /World");
   }
 
+  // Rig authoring uses typed arrays and primvar metadata, without importing text.
+  const matrices = root.CreateAttribute("bindTransforms", "matrix4d[]", true);
+  if (!matrices.Set([USD.GfMatrix4d.Identity()], Number.NaN)) throw new Error("Matrix array authoring failed");
+  for (const type of ["quatf[]", "quatd[]", "quath[]"]) {
+    const rotation = root.CreateAttribute(type.slice(0,5), type, true);
+    if (!rotation.Set([[1,0,0,0]], Number.NaN)) throw new Error(type + " authoring failed");
+  }
+  const weights = root.CreateAttribute("primvars:weights", "float[]", false);
+  if (!weights.SetMetadata("interpolation", "vertex") || !weights.SetMetadata("elementSize", 3))
+    throw new Error("Primvar metadata authoring failed");
+  stage.DefinePrim("/Prototype", "Scope");
+  stage.DefinePrim("/Prototype/Part", "Cube");
+  const copy = stage.DefinePrim("/World/Instance", "Xform");
+  if (!copy.AddReference("", "/Prototype") || !copy.SetInstanceable(true) || !copy.IsInstance())
+    throw new Error("Reference/instance authoring failed");
+  stage.GetRootLayer().SetSubLayerPaths([]);
+  if (stage.GetRootLayer().GetSubLayerPaths().length) throw new Error("Sublayer edit failed");
+
   const color = root.CreateAttribute("primvars:displayColor", "color3f", true);
   if (!color.SetColor3f(1, 0.25, 0.5, Number.NaN)) {
     throw new Error("SetColor3f failed");
