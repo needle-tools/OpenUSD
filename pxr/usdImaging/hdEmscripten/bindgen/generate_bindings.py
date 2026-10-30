@@ -435,6 +435,25 @@ def _function_expr(function: dict) -> tuple[str, bool]:
     })""", False
     if op == "createUsdzPackage":
         return """emscripten::optional_override([](std::string const& assetPath, std::string const& usdzPath) {
+      // SdfZipFileWriter reads filesystem paths directly. Resolve alone only
+      // allocates an HTTP cache path; OpenAsset fetches the actual bytes. Walk
+      // all dependencies (including inactive variants/unloaded payloads) first
+      // so unviewed textures and fields are included in offline downloads too.
+      std::vector<pxr::SdfLayerRefPtr> layers;
+      std::vector<std::string> assets, unresolved;
+      if (!pxr::UsdUtilsComputeAllDependencies(pxr::SdfAssetPath(assetPath),
+              &layers, &assets, &unresolved) || !unresolved.empty()) {
+        TF_WARN("Cannot package asset with unresolved dependencies: %s", assetPath.c_str());
+        return false;
+      }
+      auto& resolver = pxr::ArGetResolver();
+      for (auto const& asset : assets) {
+        auto const resolved = resolver.Resolve(asset);
+        if (resolved.empty() || !resolver.OpenAsset(resolved)) {
+          TF_WARN("Cannot read package dependency: %s", asset.c_str());
+          return false;
+        }
+      }
       return pxr::UsdUtilsCreateNewUsdzPackage(pxr::SdfAssetPath(assetPath), usdzPath);
     })""", False
     if op == "readFile":

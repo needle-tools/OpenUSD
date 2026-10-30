@@ -10,6 +10,7 @@
 #include "pxr/base/vt/array.h"
 #include "pxr/base/vt/value.h"
 #include "pxr/usd/sdf/assetPath.h"
+#include "pxr/usd/ar/resolver.h"
 #include "pxr/usd/sdf/layer.h"
 #include "pxr/usd/sdf/primSpec.h"
 #include "pxr/usd/sdf/propertySpec.h"
@@ -49,6 +50,7 @@
 #include "pxr/usd/usdShade/shader.h"
 #include "pxr/usd/usdShade/tokens.h"
 #include "pxr/usd/usdUtils/usdzPackage.h"
+#include "pxr/usd/usdUtils/dependencies.h"
 
 #include <emscripten/bind.h>
 #include <cmath>
