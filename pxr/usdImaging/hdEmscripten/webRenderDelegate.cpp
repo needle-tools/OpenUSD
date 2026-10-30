@@ -2820,6 +2820,8 @@ public:
             _GetFloatParam(sceneDelegate, id, HdLightTokens->width, 1.0f);
         const float height =
             _GetFloatParam(sceneDelegate, id, HdLightTokens->height, 1.0f);
+        const float length =
+            _GetFloatParam(sceneDelegate, id, TfToken("length"), 1.0f);
         const float angle =
             _GetFloatParam(sceneDelegate, id, HdLightTokens->angle, 0.53f);
 
@@ -2838,6 +2840,7 @@ public:
             state.set("radius", radius);
             state.set("width", width);
             state.set("height", height);
+            state.set("length", length);
             state.set("angle", angle);
             const VtValue texture = sceneDelegate->GetLightParamValue(id, TfToken("texture:file"));
             if (texture.IsHolding<SdfAssetPath>()) {
