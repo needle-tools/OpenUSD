@@ -553,6 +553,18 @@ public:
                 renderTag.GetString());
         });
 
+        // Hidden collision meshes can be as large as the visible asset. Keep
+        // their identity in the delegate, but defer geometry and primvar reads
+        // until they are shown. Preserve every dirty opinion so edits and
+        // animation made while hidden are applied on that first visible sync.
+        if (!visible) {
+            _deferredDirtyBits |= *dirtyBits & HdChangeTracker::AllSceneDirtyBits;
+            *dirtyBits &= ~HdChangeTracker::AllSceneDirtyBits;
+            return;
+        }
+        *dirtyBits |= _deferredDirtyBits;
+        _deferredDirtyBits = HdChangeTracker::Clean;
+
         if (HdChangeTracker::IsDoubleSidedDirty(*dirtyBits, id) ||
             HdChangeTracker::IsCullStyleDirty(*dirtyBits, id)) {
             const bool doubleSided = IsDoubleSided(delegate);
@@ -841,6 +853,7 @@ private:
     bool _reprFlatShadingEnabled;
     HdMeshGeomStyle _reprGeomStyle;
     bool _displayStyleFlatShadingEnabled;
+    HdDirtyBits _deferredDirtyBits = HdChangeTracker::Clean;
     bool _usingRefinedTopology = false;
     // Adaptive limit tessellation replaces uniform refinement when enabled
     // on the render delegate; it still publishes a refined display topology.
