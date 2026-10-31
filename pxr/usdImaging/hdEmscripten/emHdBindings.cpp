@@ -103,6 +103,13 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
     return std::string(kHdEmscriptenOpenUsdBuildInfoJson);
   }));
 
+  // Embind constructors cannot be marked async in Emscripten. A named
+  // factory allows JSPI to suspend while opening remote composition arcs.
+  function("CreateHdWebSyncDriver", optional_override([](
+      emscripten::val delegate, const std::string& file) {
+    return new pxr::HdWebSyncDriver(delegate, file);
+  }), allow_raw_pointers(), return_value_policy::take_ownership(), async());
+
   class_<pxr::HdWebSyncDriver>("HdWebSyncDriver")
     .constructor<emscripten::val, std::string>()
     .function("Draw", &pxr::HdWebSyncDriver::Draw, async())
@@ -118,7 +125,7 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
     .function("SetComplexity", &pxr::HdWebSyncDriver::SetComplexity)
     .function("GetAdaptiveSubdivision", &pxr::HdWebSyncDriver::GetAdaptiveSubdivision)
     .function("SetAdaptiveSubdivision", &pxr::HdWebSyncDriver::SetAdaptiveSubdivision)
-    .function("getFile", &pxr::HdWebSyncDriver::getFile)
+    .function("getFile", &pxr::HdWebSyncDriver::getFile, async())
     .function("resolveAssetUrl", &pxr::HdWebSyncDriver::resolveAssetUrl)
     .function("HasScopedHttpCache", &pxr::HdWebSyncDriver::HasScopedHttpCache)
     .function("HasStage", &pxr::HdWebSyncDriver::HasStage)
