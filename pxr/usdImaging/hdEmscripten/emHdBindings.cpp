@@ -166,7 +166,7 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
       }
       result.set("instances", instances);
       return result;
-    }))
+    }), async())
     .function("ResolveSelection", optional_override([](pxr::HdWebSyncDriver& driver,
                                                       const std::string& path,
                                                       int count,
@@ -230,11 +230,11 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
         }
       }
       return result;
-    }))
+    }), async())
     .function("GetStage", optional_override([](pxr::HdWebSyncDriver& driver) {
       return get_pointer(driver.GetStage());
     }), allow_raw_pointers())
-    .function("GetPhysicsSceneJson", &pxr::HdWebSyncDriver::GetPhysicsSceneJson)
+    .function("GetPhysicsSceneJson", &pxr::HdWebSyncDriver::GetPhysicsSceneJson, async())
     .function("GetStageUpAxis", &pxr::HdWebSyncDriver::GetStageUpAxis)
     .function("GetStageStartTimeCode", &pxr::HdWebSyncDriver::GetStageStartTimeCode)
     .function("GetStageEndTimeCode", &pxr::HdWebSyncDriver::GetStageEndTimeCode)
