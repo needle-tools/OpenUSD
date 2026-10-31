@@ -2621,7 +2621,10 @@ private:
             return;
         }
 
-        const auto libraries = HdEmscriptenMaterialXLibraries(hdNetwork);
+        // Preview-only networks need no MaterialX document. Defer the shared
+        // libraries until a terminal requires serialization.
+        MaterialX::DocumentPtr libraries;
+        bool librariesLoaded = false;
         for (auto const& terminal : hdNetwork.terminals) {
             auto const nodeIt = hdNetwork.nodes.find(terminal.second.upstreamNode);
             if (nodeIt == hdNetwork.nodes.end()) {
@@ -2629,6 +2632,14 @@ private:
             }
             if (nodeIt->second.nodeTypeId == TfToken("UsdPreviewSurface")) {
                 continue;
+            }
+            if (!librariesLoaded) {
+                libraries = HdEmscriptenMaterialXLibraries(hdNetwork);
+                librariesLoaded = true;
+                // Library imports can normalize a custom terminal's node id.
+                if (nodeIt->second.nodeTypeId == TfToken("UsdPreviewSurface")) {
+                    continue;
+                }
             }
 
             try {
