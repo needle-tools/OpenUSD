@@ -7,6 +7,15 @@ if (NOT PXR_BUILD_HD_EMSCRIPTEN)
 endif()
 
 set(BINDINGS_NAME "emHdBindings")
+set(HD_EMSCRIPTEN_ASYNC_FLAGS "-s ASYNCIFY -s ASYNCIFY_STACK_SIZE=1048576")
+set(HD_EMSCRIPTEN_EXTERN_EXPORTS "${CMAKE_CURRENT_SOURCE_DIR}/js/ViewerExternRuntimeExports.js")
+set(HD_EMSCRIPTEN_JSPI_POST_JS "")
+if(PXR_EMSCRIPTEN_RUNTIME STREQUAL "JSPI")
+    set(BINDINGS_NAME "emHdBindings.jspi")
+    set(HD_EMSCRIPTEN_ASYNC_FLAGS "-s JSPI")
+    set(HD_EMSCRIPTEN_EXTERN_EXPORTS "${CMAKE_CURRENT_SOURCE_DIR}/js/ViewerExternRuntimeExportsJspi.js")
+    set(HD_EMSCRIPTEN_JSPI_POST_JS "--post-js ${CMAKE_CURRENT_SOURCE_DIR}/js/ViewerJspiRuntimeExports.js")
+endif()
 set(HD_EMSCRIPTEN_BINDGEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bindgen")
 set(HD_EMSCRIPTEN_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(HD_EMSCRIPTEN_CORE_BINDINGS_INC "${HD_EMSCRIPTEN_GENERATED_DIR}/emHdCoreBindings.inc")
@@ -307,15 +316,15 @@ endif()
 set_target_properties(${BINDINGS_NAME}
     PROPERTIES
         SUFFIX ".js"
-        LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/js/MemoryConfiguration.js;${CMAKE_CURRENT_SOURCE_DIR}/js/ViewerRuntimeExports.js;${CMAKE_CURRENT_SOURCE_DIR}/js/ViewerExternRuntimeExports.js"
+        LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/js/MemoryConfiguration.js;${CMAKE_CURRENT_SOURCE_DIR}/js/ViewerRuntimeExports.js;${CMAKE_CURRENT_SOURCE_DIR}/js/ViewerExternRuntimeExports.js;${HD_EMSCRIPTEN_EXTERN_EXPORTS};${CMAKE_CURRENT_SOURCE_DIR}/js/ViewerJspiRuntimeExports.js"
 )
 target_compile_options(${BINDINGS_NAME} PRIVATE "SHELL: -lembind -pthread")
 target_link_options(${BINDINGS_NAME} PRIVATE "SHELL: ${HD_EMSCRIPTEN_LINK_OPTIMIZATION} -s EXPORT_NAME='getUsdModule' \
-    -s MODULARIZE=1 -lembind -s PTHREAD_POOL_SIZE=10 -s ASYNCIFY \
-    -s ASYNCIFY_STACK_SIZE=1048576 \
+    -s MODULARIZE=1 -lembind -s PTHREAD_POOL_SIZE=10 ${HD_EMSCRIPTEN_ASYNC_FLAGS} \
     -sIMPORTED_MEMORY=1 --pre-js ${CMAKE_CURRENT_SOURCE_DIR}/js/MemoryConfiguration.js  \
     --post-js ${CMAKE_CURRENT_SOURCE_DIR}/js/ViewerRuntimeExports.js \
-    --extern-post-js ${CMAKE_CURRENT_SOURCE_DIR}/js/ViewerExternRuntimeExports.js")
+    ${HD_EMSCRIPTEN_JSPI_POST_JS} \
+    --extern-post-js ${HD_EMSCRIPTEN_EXTERN_EXPORTS}")
 
 install(
     TARGETS ${BINDINGS_NAME}

@@ -9,7 +9,8 @@
   "toolchain": {
     "emscripten": "@PXR_HD_EMSCRIPTEN_EMSCRIPTEN_VERSION@",
     "cxxCompiler": "@CMAKE_CXX_COMPILER@",
-    "cmakeBuildType": "@CMAKE_BUILD_TYPE@"
+    "cmakeBuildType": "@CMAKE_BUILD_TYPE@",
+    "asyncRuntime": "@PXR_EMSCRIPTEN_RUNTIME@"
   },
   "modules": {
     "usdImaging": @HD_EMSCRIPTEN_BUILD_USD_IMAGING@,
