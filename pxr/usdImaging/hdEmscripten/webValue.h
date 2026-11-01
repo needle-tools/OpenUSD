@@ -24,11 +24,16 @@
 #include "pxr/base/gf/vec3i.h"
 #include "pxr/base/gf/vec4i.h"
 #include "pxr/base/gf/vec3h.h"
+#include "pxr/base/gf/vec2h.h"
+#include "pxr/base/gf/vec4h.h"
+#include "pxr/base/gf/matrix2d.h"
+#include "pxr/base/gf/matrix3d.h"
 #include "pxr/base/gf/matrix4d.h"
 #include "pxr/base/gf/matrix4f.h"
 #include "pxr/base/gf/quatf.h"
 #include "pxr/base/gf/quatd.h"
 #include "pxr/base/gf/quath.h"
+#include "pxr/usd/sdf/timeCode.h"
 #include <emscripten/val.h>
 namespace pxr { namespace hdEmscriptenValues {
 using namespace PXR_NS;
@@ -94,6 +99,15 @@ inline emscripten::val _ValueToJsVal(GfVec2i const& value) { return _GfVecToJsVa
 inline emscripten::val _ValueToJsVal(GfVec3i const& value) { return _GfVecToJsVal(value); }
 inline emscripten::val _ValueToJsVal(GfVec4i const& value) { return _GfVecToJsVal(value); }
 inline emscripten::val _ValueToJsVal(GfVec3h const& value) { return _GfVecToJsVal(value); }
+inline emscripten::val _ValueToJsVal(GfVec2h const& value) { return _GfVecToJsVal(value); }
+inline emscripten::val _ValueToJsVal(GfVec4h const& value) { return _GfVecToJsVal(value); }
+inline emscripten::val _ValueToJsVal(SdfTimeCode const& value) { return emscripten::val(value.GetValue()); }
+inline emscripten::val _ValueToJsVal(GfMatrix2d const& value) {
+    auto result = emscripten::val::array(); for (int r=0;r<2;++r) result.set(r,_GfVecToJsVal(value.GetRow(r))); return result;
+}
+inline emscripten::val _ValueToJsVal(GfMatrix3d const& value) {
+    auto result = emscripten::val::array(); for (int r=0;r<3;++r) result.set(r,_GfVecToJsVal(value.GetRow(r))); return result;
+}
 inline emscripten::val _ValueToJsVal(GfMatrix4d const& value) {
     auto result = emscripten::val::array();
     for (int r = 0; r < 4; ++r) result.set(r, _GfVecToJsVal(value.GetRow(r)));
@@ -160,6 +174,12 @@ inline emscripten::val _VtValueToJsVal(VtValue const &value, bool stringifyUnsup
 
     HD_EMSCRIPTEN_CONVERT_SCALAR(int64_t)
     HD_EMSCRIPTEN_CONVERT_SCALAR(uint64_t)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(unsigned int)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(unsigned char)
+    HD_EMSCRIPTEN_CONVERT_ARRAY(int64_t)
+    HD_EMSCRIPTEN_CONVERT_ARRAY(uint64_t)
+    HD_EMSCRIPTEN_CONVERT_ARRAY(unsigned int)
+    HD_EMSCRIPTEN_CONVERT_ARRAY(unsigned char)
     HD_EMSCRIPTEN_CONVERT_SCALAR(SdfTokenListOp)
     HD_EMSCRIPTEN_CONVERT_SCALAR(SdfStringListOp)
     HD_EMSCRIPTEN_CONVERT_SCALAR(SdfPathListOp)
@@ -211,6 +231,16 @@ inline emscripten::val _VtValueToJsVal(VtValue const &value, bool stringifyUnsup
     HD_EMSCRIPTEN_CONVERT_ARRAY(GfHalf)
     HD_EMSCRIPTEN_CONVERT_SCALAR(GfVec3h)
     HD_EMSCRIPTEN_CONVERT_ARRAY(GfVec3h)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(GfVec2h)
+    HD_EMSCRIPTEN_CONVERT_ARRAY(GfVec2h)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(GfVec4h)
+    HD_EMSCRIPTEN_CONVERT_ARRAY(GfVec4h)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(GfMatrix2d)
+    HD_EMSCRIPTEN_CONVERT_ARRAY(GfMatrix2d)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(GfMatrix3d)
+    HD_EMSCRIPTEN_CONVERT_ARRAY(GfMatrix3d)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(SdfTimeCode)
+    HD_EMSCRIPTEN_CONVERT_ARRAY(SdfTimeCode)
     HD_EMSCRIPTEN_CONVERT_SCALAR(GfMatrix4f)
     HD_EMSCRIPTEN_CONVERT_ARRAY(GfMatrix4f)
     HD_EMSCRIPTEN_CONVERT_SCALAR(GfMatrix4d)
