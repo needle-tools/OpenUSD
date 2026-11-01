@@ -143,7 +143,7 @@ HdEmscriptenGetMdlMaterial(
         return {};
     }
     const UsdShadeMaterial material(stage->GetPrimAtPath(materialPath));
-    if (!material || HdEmscriptenGetPreferredPreviewSurface(material, renderContexts)) {
+    if (!material) {
         return {};
     }
     ArResolverContextBinder binder(stage->GetPathResolverContext());
@@ -163,6 +163,23 @@ HdEmscriptenGetMdlMaterial(
         return {};
     }
     VtDictionary data = HdEmscriptenReadMdlShader(shader, time);
+    if (HdEmscriptenGetPreferredPreviewSurface(material, renderContexts)) {
+        // PreviewSurface cannot describe transmission. Keep a supported
+        // OmniGlass terminal instead of its often opaque exported preview.
+        // All other families retain their authored universal surface, as do
+        // glass graphs whose connected expressions we cannot approximate.
+        TfToken id;
+        shader.GetSourceAssetSubIdentifier(&id, mdl);
+        const std::string asset = sourceAsset.GetAssetPath();
+        const auto slash = asset.find_last_of("/\\");
+        const std::string module = asset.substr(slash == std::string::npos ? 0 : slash + 1);
+        const auto unsupported = data.find("unsupportedInputs");
+        if (id != TfToken("OmniGlass") || module != "OmniGlass.mdl" ||
+            (unsupported != data.end() &&
+             !unsupported->second.UncheckedGet<VtStringArray>().empty())) {
+            return {};
+        }
+    }
     data["renderContext"] = VtValue(std::string("mdl"));
     return data;
 }
