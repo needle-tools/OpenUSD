@@ -107,7 +107,13 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
   // factory allows JSPI to suspend while opening remote composition arcs.
   function("CreateHdWebSyncDriver", optional_override([](
       emscripten::val delegate, const std::string& file) {
-    return new pxr::HdWebSyncDriver(delegate, file);
+    auto stage = pxr::WebRunComposition([file]() {
+      auto* resolver = dynamic_cast<pxr::HttpResolver*>(&pxr::ArGetUnderlyingResolver());
+      const auto context = resolver ? resolver->CreateScopedContext(file)
+          : pxr::ArGetResolver().CreateDefaultContextForAsset(file);
+      return pxr::UsdStage::Open(file, context);
+    });
+    return new pxr::HdWebSyncDriver(delegate, stage);
   }), allow_raw_pointers(), return_value_policy::take_ownership(), async());
 
   class_<pxr::HdWebSyncDriver>("HdWebSyncDriver")

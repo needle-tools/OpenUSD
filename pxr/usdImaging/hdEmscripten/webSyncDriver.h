@@ -38,6 +38,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -46,6 +47,24 @@
 PXR_NAMESPACE_OPEN_SCOPE
 
 using HdRenderPassSharedPtr = std::shared_ptr<HdRenderPass>;
+
+// Stage composition may dispatch TBB tasks that fetch HTTP layers. Waiting for
+// those tasks on the browser thread blocks rendering and progress delivery.
+// Keep the existing async binding contract, but yield while a worker owns USD.
+// Callers serialize access to the stage for the duration of this operation.
+template <class Operation>
+auto WebRunComposition(Operation operation, bool asynchronous = true)
+    -> decltype(operation()) {
+    if (!asynchronous || !emscripten_is_main_runtime_thread()) return operation();
+    std::packaged_task<decltype(operation())()> task(std::move(operation));
+    auto result = task.get_future();
+    std::thread(std::move(task)).detach();
+    while (result.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        emscripten_sleep(1);
+    }
+    return result.get();
+}
+
 
 class _HdEmscriptenSyncTimer {
 public:
@@ -172,6 +191,11 @@ public:
         , _complexity(1.0f)
     {
         HdRprimCollection collection = _GetCollectionForComplexity();
+        if (usdStage) {
+            if (const auto* context = usdStage->GetPathResolverContext().Get<HttpResolverContext>()) {
+                _httpCache = context->scope;
+            }
+        }
 
         _Init(usdStage,
               collection,
