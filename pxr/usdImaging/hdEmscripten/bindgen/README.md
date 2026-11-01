@@ -61,3 +61,14 @@ state. `MakeVisible(timeCode)` and `MakeInvisible(timeCode)` use
 `UsdGeomImageable`, including ancestor and sibling visibility handling. Pass NaN
 for default time. Both mutation methods return whether the requested computed
 visibility was achieved.
+
+`Stage.TraverseAllWithInstanceProxies(expandedInstances)` includes instance
+children at their composed paths. Pass null for every proxy, or an array of
+instance paths to expand only those branches. Instance proxies report
+`Prim.IsInstanceProxy()` and remain read-only according to USD authoring rules.
+
+`GetAllMetadataValues()` returns owned typed values on prims, attributes and
+relationships. Composed list operations become arrays of applied items,
+references/payloads retain asset and prim paths and layer offsets, and nested
+dictionaries retain booleans/numbers/arrays. Integers outside JavaScript's safe
+range are strings. `GetAllMetadata()` retains its legacy display strings.
