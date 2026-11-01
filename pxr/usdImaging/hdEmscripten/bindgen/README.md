@@ -72,3 +72,23 @@ relationships. Composed list operations become arrays of applied items,
 references/payloads retain asset and prim paths and layer offsets, and nested
 dictionaries retain booleans/numbers/arrays. Integers outside JavaScript's safe
 range are strings. `GetAllMetadata()` retains its legacy display strings.
+
+`GetMetadata(key)` and `GetMetadataByDictKey(key, keyPath)` return typed composed
+values. `SetMetadata` accepts dictionaries, explicit list arrays or list-operation
+objects (`isExplicit`, `explicitItems`, `prependedItems`, `appendedItems`,
+`deletedItems`, `orderedItems`, `addedItems`). Spec-stack entries expose
+`metadataValues` with these operation buckets intact, alongside the legacy
+`metadata` display strings. This preserves authored composition operations.
+
+Dictionary updates preserve the types of existing entries. New scalar entries
+infer bool/string/double, and homogeneous arrays infer bool[]/string[]/double[].
+For an exact type, a new empty array or an exact 64-bit value, use
+`SetMetadataByDictKey(key, keyPath, value, typeName)` with an Sdf type such as
+`token[]` or `uint64`; an empty typeName preserves/infers the entry type.
+`ClearMetadata` and `ClearMetadataByDictKey` remove authored opinions.
+
+Attribute `Get(time)` / `Set(value, time)` and transform-op `GetValue(time)` /
+`Set(value, time)` exchange owned JS values. Transform-op `Get(time)` remains a
+legacy display-string API. Unsigned and 64-bit integers, half values, matrix2d,
+matrix3d, timecode and asset arrays support typed reads and writes. 64-bit setters
+accept bigint or exact decimal strings and reject unsafe JS integer numbers.
