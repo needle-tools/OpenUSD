@@ -109,6 +109,13 @@ int main()
     material.CreateSurfaceOutput().ConnectToSource(preview.CreateOutput(TfToken("surface"), SdfValueTypeNames->Token));
     assert(read(1).empty());
     assert(HdEmscriptenGetPreferredPreviewSurface(material, contexts).GetPath() == preview.GetPath());
+    // The universal preview cannot encode glass transmission. Read supported
+    // authored OmniGlass inputs rather than rendering its opaque white proxy.
+    shader.SetSourceAsset(SdfAssetPath("OmniGlass.mdl"), TfToken("mdl"));
+    shader.SetSourceAssetSubIdentifier(TfToken("OmniGlass"), TfToken("mdl"));
+    assert(read(1).empty()); // unresolved expression still prefers the preview
+    roughness.GetAttr().ClearConnections();
+    assert(read(1).find("subIdentifier")->second.Get<std::string>() == "OmniGlass");
     // A selected MaterialX surface retains priority over both alternatives.
     auto mtlx = UsdShadeShader::Define(stage, SdfPath("/Material/MaterialX"));
     mtlx.SetShaderId(TfToken("ND_standard_surface_surfaceshader"));
