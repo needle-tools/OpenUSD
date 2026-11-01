@@ -8,6 +8,11 @@
 #include "pxr/base/arch/demangle.h"
 #include "pxr/base/tf/diagnostic.h"
 #include "pxr/usd/sdf/assetPath.h"
+#include "pxr/usd/sdf/listOp.h"
+#include "pxr/usd/sdf/path.h"
+#include "pxr/usd/sdf/reference.h"
+#include "pxr/usd/sdf/payload.h"
+#include "pxr/base/tf/stringUtils.h"
 #include "pxr/base/gf/half.h"
 #include "pxr/base/gf/vec2f.h"
 #include "pxr/base/gf/vec3f.h"
@@ -27,6 +32,7 @@
 #include <emscripten/val.h>
 namespace pxr { namespace hdEmscriptenValues {
 using namespace PXR_NS;
+inline emscripten::val _VtValueToJsVal(VtValue const &value, bool stringifyUnsupported = false);
 template <class Vec>
 inline emscripten::val _GfVecToJsVal(Vec const &vec)
 {
@@ -51,6 +57,30 @@ inline emscripten::val _ValueToJsVal(TfToken const &value)
 inline emscripten::val _ValueToJsVal(SdfAssetPath const &value)
 {
     return emscripten::val(value.GetAssetPath());
+}
+
+inline emscripten::val _ValueToJsVal(int64_t value) {
+    return value < -9007199254740991LL || value > 9007199254740991LL ? emscripten::val(std::to_string(value)) : emscripten::val(static_cast<double>(value));
+}
+inline emscripten::val _ValueToJsVal(uint64_t value) {
+    return value > 9007199254740991ULL ? emscripten::val(std::to_string(value)) : emscripten::val(static_cast<double>(value));
+}
+inline emscripten::val _ValueToJsVal(SdfPath const &value) { return emscripten::val(value.GetString()); }
+inline emscripten::val _ValueToJsVal(SdfPayload const &value) {
+    auto result = emscripten::val::object();
+    result.set("assetPath", value.GetAssetPath()); result.set("primPath", value.GetPrimPath().GetString());
+    auto offset = emscripten::val::object(); offset.set("offset", value.GetLayerOffset().GetOffset()); offset.set("scale", value.GetLayerOffset().GetScale());
+    result.set("layerOffset", offset); return result;
+}
+inline emscripten::val _ValueToJsVal(SdfReference const &value) {
+    auto result = _ValueToJsVal(SdfPayload(value.GetAssetPath(), value.GetPrimPath(), value.GetLayerOffset()));
+    result.set("customData", _VtValueToJsVal(VtValue(value.GetCustomData()), true)); return result;
+}
+template <class T>
+inline emscripten::val _ValueToJsVal(SdfListOp<T> const &value) {
+    auto result = emscripten::val::array(); unsigned index = 0;
+    for (auto const &item : value.GetAppliedItems()) result.set(index++, _ValueToJsVal(item));
+    return result;
 }
 
 inline emscripten::val _ValueToJsVal(GfHalf value) { return emscripten::val(static_cast<double>(value)); }
@@ -103,13 +133,13 @@ inline emscripten::val _VtArrayToJsVal(VtArray<T> const &array)
     return jsArray;
 }
 
-inline emscripten::val _VtValueToJsVal(VtValue const &value)
+inline emscripten::val _VtValueToJsVal(VtValue const &value, bool stringifyUnsupported)
 {
     if (value.IsEmpty()) return emscripten::val::undefined();
     if (value.IsHolding<VtDictionary>()) {
         emscripten::val object = emscripten::val::object();
         for (auto const &entry : value.UncheckedGet<VtDictionary>()) {
-            object.set(entry.first, _VtValueToJsVal(entry.second));
+            object.set(entry.first, _VtValueToJsVal(entry.second, stringifyUnsupported));
         }
         return object;
     }
@@ -128,6 +158,20 @@ inline emscripten::val _VtValueToJsVal(VtValue const &value)
         return _VtArrayToJsVal(value.UncheckedGet<VtArray<T>>()); \
     }
 
+    HD_EMSCRIPTEN_CONVERT_SCALAR(int64_t)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(uint64_t)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(SdfTokenListOp)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(SdfStringListOp)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(SdfPathListOp)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(SdfReferenceListOp)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(SdfPayloadListOp)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(SdfIntListOp)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(SdfUIntListOp)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(SdfInt64ListOp)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(SdfUInt64ListOp)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(SdfPath)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(SdfReference)
+    HD_EMSCRIPTEN_CONVERT_SCALAR(SdfPayload)
     HD_EMSCRIPTEN_CONVERT_SCALAR(bool)
     HD_EMSCRIPTEN_CONVERT_SCALAR(int)
     HD_EMSCRIPTEN_CONVERT_SCALAR(float)
@@ -182,6 +226,7 @@ inline emscripten::val _VtValueToJsVal(VtValue const &value)
 #undef HD_EMSCRIPTEN_CONVERT_VEC
 #undef HD_EMSCRIPTEN_CONVERT_SCALAR
 
+    if (stringifyUnsupported) return emscripten::val(TfStringify(value));
     TF_WARN("Unsupported USD value type '%s'",
         ArchGetDemangled(value.GetTypeid()).c_str());
     return emscripten::val::undefined();

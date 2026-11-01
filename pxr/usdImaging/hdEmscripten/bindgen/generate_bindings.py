@@ -158,6 +158,8 @@ def _lambda(cpp_type: str, method: dict) -> tuple[str, bool]:
     })""", False
     if op == "objectGetAllMetadata":
         return f"emscripten::optional_override([]({cpp_type} const& self) {{ return _ObjectMetadataToVal(self); }})", False
+    if op == "objectGetAllMetadataValues":
+        return f"emscripten::optional_override([]({cpp_type} const& self) {{ return _ObjectMetadataValuesToVal(self); }})", False
     if op == "objectGetMetadataString":
         return f"""emscripten::optional_override([]({cpp_type} const& self, std::string const& key) {{
       pxr::VtValue value;
@@ -362,6 +364,20 @@ def _lambda(cpp_type: str, method: dict) -> tuple[str, bool]:
       std::vector<pxr::UsdPrim> result;
       for (pxr::UsdPrim const& prim : stage.TraverseAll()) {
         result.push_back(prim);
+      }
+      return result;
+    })""", False
+    if op == "stageTraverseAllWithInstanceProxies":
+        return """emscripten::optional_override([](pxr::UsdStage& stage, emscripten::val expandedInstances) {
+      const bool all = expandedInstances.isNull() || expandedInstances.isUndefined();
+      std::set<std::string> expanded;
+      if (!all) for (unsigned i = 0; i < expandedInstances["length"].as<unsigned>(); ++i)
+        expanded.insert(expandedInstances[i].as<std::string>());
+      std::vector<pxr::UsdPrim> result;
+      auto range = stage.Traverse(pxr::UsdTraverseInstanceProxies(pxr::UsdPrimAllPrimsPredicate));
+      for (auto it = range.begin(); it != range.end(); ++it) {
+        result.push_back(*it);
+        if (!all && it->IsInstance() && !expanded.count(it->GetPath().GetString())) it.PruneChildren();
       }
       return result;
     })""", False
@@ -1027,6 +1043,15 @@ def generate_cpp(manifest: dict) -> str:
         "  emscripten::val result = emscripten::val::object();",
         "  for (auto const& entry : object.GetAllMetadata()) {",
         "    result.set(entry.first.GetString(), _VtValueToString(entry.second));",
+        "  }",
+        "  return result;",
+        "}",
+        "",
+        "emscripten::val _ObjectMetadataValuesToVal(UsdObject const& object)",
+        "{",
+        "  emscripten::val result = emscripten::val::object();",
+        "  for (auto const& entry : object.GetAllMetadata()) {",
+        "    result.set(entry.first.GetString(), pxr::hdEmscriptenValues::_VtValueToJsVal(entry.second, true));",
         "  }",
         "  return result;",
         "}",
