@@ -268,11 +268,13 @@ def _lambda(cpp_type: str, method: dict) -> tuple[str, bool]:
     })""", False
     if op == "primLoad":
         return """emscripten::optional_override([](pxr::UsdPrim const& prim) {
-      prim.Load();
+      pxr::WebRunComposition([prim]() { prim.Load(); },
+        bool(prim.GetStage()->GetPathResolverContext().Get<pxr::HttpResolverContext>()));
     })""", False
     if op == "primUnload":
         return """emscripten::optional_override([](pxr::UsdPrim const& prim) {
-      prim.Unload();
+      pxr::WebRunComposition([prim]() { prim.Unload(); },
+        bool(prim.GetStage()->GetPathResolverContext().Get<pxr::HttpResolverContext>()));
     })""", False
     if op == "primAddPayload":
         return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& assetPath, std::string const& primPath) {
@@ -284,7 +286,9 @@ def _lambda(cpp_type: str, method: dict) -> tuple[str, bool]:
     })""", False
     if op == "primSetVariantSelection":
         return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& variantSetName, std::string const& variantName) {
-      return prim.GetVariantSet(variantSetName).SetVariantSelection(variantName);
+      return pxr::WebRunComposition([prim, variantSetName, variantName]() {
+        return prim.GetVariantSet(variantSetName).SetVariantSelection(variantName);
+      }, bool(prim.GetStage()->GetPathResolverContext().Get<pxr::HttpResolverContext>()));
     })""", False
     if op == "primGetVariantSelection":
         return """emscripten::optional_override([](pxr::UsdPrim const& prim, std::string const& variantSetName) {
