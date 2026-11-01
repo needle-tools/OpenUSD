@@ -6,6 +6,7 @@
 #include "webValue.h"
 #include "webMetadata.h"
 #include "webAuthoring.h"
+#include "webHierarchy.h"
 #include "generated/openusdBuildInfo.h"
 
 #include "pxr/base/tf/stringUtils.h"
