@@ -341,8 +341,8 @@ def _lambda(cpp_type: str, method: dict) -> tuple[str, bool]:
     })""", True
     if op == "stageRootLayerPointer":
         return """emscripten::optional_override([](pxr::UsdStage& stage) {
-      return get_pointer(stage.GetRootLayer());
-    })""", True
+      return pxr::SdfLayerRefPtr(stage.GetRootLayer());
+    })""", False
     if op == "stageGetPrimAtPath":
         return """emscripten::optional_override([](pxr::UsdStage& stage, std::string const& path) {
       return stage.GetPrimAtPath(pxr::SdfPath(path));
@@ -1317,6 +1317,8 @@ def generate_cpp(manifest: dict) -> str:
 
     for cls in manifest["classes"]:
         lines.append(f"  class_<{cls['cppType']}>(\"{cls['jsName']}\")")
+        if cls["jsName"] == "Layer":
+            lines.append('    .smart_ptr<pxr::SdfLayerRefPtr>("LayerRef")')
         for method in cls["methods"]:
             expr, allow_raw = _lambda(cls["cppType"], method)
             suffix = _policies(method, allow_raw)

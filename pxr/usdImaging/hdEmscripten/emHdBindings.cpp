@@ -73,6 +73,13 @@
 #include <vector>
 using namespace emscripten;
 
+namespace emscripten {
+template<> struct smart_ptr_trait<pxr::SdfLayerRefPtr> : default_smart_ptr_trait<pxr::SdfLayerRefPtr> {
+  using element_type = pxr::SdfLayer;
+  static element_type* get(pxr::SdfLayerRefPtr const& layer) { return get_pointer(layer); }
+};
+}
+
 namespace {
 // The legacy imaging adapter uses variant-selection syntax for some duplicated
 // nested instancers. These cache addresses are not composed USD prim paths.
