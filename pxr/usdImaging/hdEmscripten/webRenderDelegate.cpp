@@ -775,7 +775,8 @@ public:
                     val(typed_memory_view(
                         16 * transforms.size(),
                         reinterpret_cast<float*>(transforms.data()))),
-                    static_cast<int>(transforms.size()));
+                    static_cast<int>(transforms.size()),
+                    !GetInstancerId().IsEmpty());
             });
         }
 

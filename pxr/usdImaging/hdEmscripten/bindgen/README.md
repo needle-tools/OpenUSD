@@ -55,3 +55,9 @@ fractional integer components throw TypeError. Bool arrays take booleans.
 local-stack layer, preserving its exact layer identity and resolver context. It
 does not reopen an asset URL. Payloads start unloaded. Release the owned result
 with `USD.ReleaseStage`; null means the layer is not part of the stage.
+
+`Prim.ComputeVisibility(timeCode)` and `ComputePurpose()` return inherited USD
+state. `MakeVisible(timeCode)` and `MakeInvisible(timeCode)` use
+`UsdGeomImageable`, including ancestor and sibling visibility handling. Pass NaN
+for default time. Both mutation methods return whether the requested computed
+visibility was achieved.
