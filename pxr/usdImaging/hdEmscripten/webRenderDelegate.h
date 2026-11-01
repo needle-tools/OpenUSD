@@ -29,6 +29,7 @@
 PXR_NAMESPACE_OPEN_SCOPE
 
 void runInMainThread(std::function<void()> fun);
+void runInMainThreadAsync(std::function<void()> fun);
 
 class WebRenderDelegate final : public HdRenderDelegate
 {

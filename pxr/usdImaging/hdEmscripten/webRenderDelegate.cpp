@@ -166,6 +166,17 @@ void runInMainThread(std::function<void()> fun) {
     emscripten_sync_run_in_main_runtime_thread(EM_FUNC_SIG_VI, _runInMainThread, (void *) &fun);
 }
 
+void runInMainThreadAsync(std::function<void()> fun) {
+    if (emscripten_is_main_runtime_thread()) { fun(); return; }
+    auto* owned = new std::function<void()>(std::move(fun));
+    emscripten_async_run_in_main_runtime_thread(EM_FUNC_SIG_VI,
+        +[](int pointer) {
+            std::unique_ptr<std::function<void()>> callback(
+                reinterpret_cast<std::function<void()>*>(pointer));
+            (*callback)();
+        }, owned);
+}
+
 class MainThreadJsVal {
 public:
     MainThreadJsVal() = default;
