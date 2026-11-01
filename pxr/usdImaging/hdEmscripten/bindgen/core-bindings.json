@@ -5,6 +5,7 @@
       "cppType": "pxr::SdfLayer",
       "jsName": "Layer",
       "tsName": "USDLayer",
+      "tsDelete": true,
       "methods": [
         { "jsName": "GetIdentifier", "tsReturn": "string", "op": "direct", "cpp": "&pxr::SdfLayer::GetIdentifier" },
         { "jsName": "GetDisplayName", "tsReturn": "string", "op": "direct", "cpp": "&pxr::SdfLayer::GetDisplayName" },

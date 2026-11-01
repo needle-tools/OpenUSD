@@ -92,3 +92,7 @@ Attribute `Get(time)` / `Set(value, time)` and transform-op `GetValue(time)` /
 legacy display-string API. Unsigned and 64-bit integers, half values, matrix2d,
 matrix3d, timecode and asset arrays support typed reads and writes. 64-bit setters
 accept bigint or exact decimal strings and reject unsafe JS integer numbers.
+
+`GetRootLayer()` returns a reference-counted layer handle. Deleting its JS wrapper
+releases only that reference; the owning stage and other handles remain valid.
+A retained layer handle remains usable after the stage is released.
