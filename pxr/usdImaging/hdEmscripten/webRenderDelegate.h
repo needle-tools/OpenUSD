@@ -2,7 +2,6 @@
 #define PXR_USD_IMAGING_USD_IMAGING_EMSCRIPTEN_RENDER_DELEGATE_H
 
 #include "pxr/pxr.h"
-#include "pxr/usd/usd/stage.h"
 #include "pxr/imaging/hd/renderDelegate.h"
 #include "pxr/imaging/hd/instancer.h"
 #include "pxr/imaging/hd/mesh.h"
@@ -41,22 +40,6 @@ public:
     };
     virtual ~WebRenderDelegate() = default;
 
-    void SetStage(UsdStageRefPtr const &stage) { _stage = stage; }
-    UsdStageRefPtr const &GetStage() const { return _stage; }
-    void SetTime(UsdTimeCode time) { _time = time; }
-    UsdTimeCode GetTime() const { return _time; }
-    void TrackMdlMaterial(SdfPath const &id, bool timeVarying) {
-        std::lock_guard<std::mutex> lock(_mdlMaterialMutex);
-        _mdlMaterials[id] = timeVarying;
-    }
-    void ForgetMdlMaterial(SdfPath const &id) {
-        std::lock_guard<std::mutex> lock(_mdlMaterialMutex);
-        _mdlMaterials.erase(id);
-    }
-    std::map<SdfPath, bool> GetMdlMaterials() const {
-        std::lock_guard<std::mutex> lock(_mdlMaterialMutex);
-        return _mdlMaterials;
-    }
     // Refined meshes use Bfr limit-surface tessellation instead of uniform
     // refinement. Callers must mark rprim display styles dirty on change.
     void SetAdaptiveSubdivision(bool enabled) { _adaptiveSubdivision = enabled; }
@@ -135,10 +118,6 @@ private:
                                 const WebRenderDelegate &) = delete;
 
     emscripten::val _renderDelegateInterface;
-    UsdStageRefPtr _stage;
-    UsdTimeCode _time = UsdTimeCode::Default();
-    mutable std::mutex _mdlMaterialMutex;
-    std::map<SdfPath, bool> _mdlMaterials;
     std::atomic<bool> _adaptiveSubdivision{false};
 };
 

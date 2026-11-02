@@ -24,7 +24,6 @@
 #include "webRenderDelegate.h"
 #include "webValue.h"
 #include "webAdaptiveSubdivision.h"
-#include "webMdlMaterial.h"
 #include "webMeshInvalidation.h"
 #include "pxr/usdImaging/usdImaging/materialParamUtils.h"
 #include "pxr/base/gf/vec2f.h"
@@ -38,8 +37,6 @@
 #include "pxr/imaging/hd/volume.h"
 #include "pxr/imaging/hd/field.h"
 #include "pxr/imaging/hd/basisCurvesTopology.h"
-#include "pxr/usd/usdGeom/nurbsCurves.h"
-#include "pxr/usd/usdGeom/nurbsPatch.h"
 #include "pxr/imaging/hd/bprim.h"
 #include "pxr/imaging/hd/tokens.h"
 #include "pxr/imaging/hd/repr.h"
@@ -271,199 +268,8 @@ emscripten::val _MatrixToJsVal(GfMatrix4f const& matrix)
 }
 
 
-class Emscripten_Instancer final : public HdInstancer {
-public:
-    Emscripten_Instancer(HdSceneDelegate* delegate, SdfPath const& id)
-        : HdInstancer(delegate, id)
-        , _visible(true)
-    {
-    }
-
-    void Sync(HdSceneDelegate *delegate,
-              HdRenderParam *renderParam,
-              HdDirtyBits *dirtyBits) override
-    {
-        if (*dirtyBits & HdChangeTracker::DirtyVisibility) {
-            _visible = delegate->GetVisible(GetId());
-        }
-
-        _UpdateInstancer(delegate, dirtyBits);
-
-        if (HdChangeTracker::IsAnyPrimvarDirty(*dirtyBits, GetId())) {
-            _SyncPrimvars(delegate, *dirtyBits);
-        }
-    }
-
-    VtMatrix4dArray ComputeInstanceTransforms(SdfPath const &prototypeId)
-    {
-        if (!_visible) {
-            return {};
-        }
-
-        HdSceneDelegate *delegate = GetDelegate();
-        VtIntArray instanceIndices =
-            delegate->GetInstanceIndices(GetId(), prototypeId);
-        GfMatrix4d instancerTransform =
-            delegate->GetInstancerTransform(GetId());
-
-        VtMatrix4dArray transforms(instanceIndices.size());
-        for (size_t i = 0; i < instanceIndices.size(); ++i) {
-            transforms[i] = instancerTransform;
-        }
-
-        _ApplyTranslations(instanceIndices, &transforms);
-        _ApplyRotations(instanceIndices, &transforms);
-        _ApplyScales(instanceIndices, &transforms);
-        _ApplyTransforms(instanceIndices, &transforms);
-
-        if (GetParentId().IsEmpty()) {
-            return transforms;
-        }
-
-        HdInstancer *parentInstancer =
-            delegate->GetRenderIndex().GetInstancer(GetParentId());
-        Emscripten_Instancer *parent =
-            dynamic_cast<Emscripten_Instancer*>(parentInstancer);
-        if (!parent) {
-            return transforms;
-        }
-
-        VtMatrix4dArray parentTransforms =
-            parent->ComputeInstanceTransforms(GetId());
-        VtMatrix4dArray final(parentTransforms.size() * transforms.size());
-        for (size_t i = 0; i < parentTransforms.size(); ++i) {
-            for (size_t j = 0; j < transforms.size(); ++j) {
-                final[i * transforms.size() + j] =
-                    transforms[j] * parentTransforms[i];
-            }
-        }
-        return final;
-    }
-
-private:
-    std::map<TfToken, VtValue> _primvarMap;
-    bool _visible;
-
-    void _SyncPrimvars(HdSceneDelegate *delegate, HdDirtyBits dirtyBits)
-    {
-        SdfPath const& id = GetId();
-        HdPrimvarDescriptorVector primvars =
-            delegate->GetPrimvarDescriptors(id, HdInterpolationInstance);
-
-        for (HdPrimvarDescriptor const& primvar : primvars) {
-            if (!HdChangeTracker::IsPrimvarDirty(dirtyBits, id, primvar.name)) {
-                continue;
-            }
-
-            VtValue value = delegate->Get(id, primvar.name);
-            if (value.IsEmpty()) {
-                _primvarMap.erase(primvar.name);
-            } else {
-                _primvarMap[primvar.name] = value;
-            }
-        }
-    }
-
-    template <class ArrayT, class ValueT>
-    static bool _SampleArray(
-        VtValue const &value,
-        int index,
-        ValueT *outValue)
-    {
-        if (!value.IsHolding<ArrayT>() || index < 0) {
-            return false;
-        }
-
-        ArrayT const &array = value.UncheckedGet<ArrayT>();
-        if (static_cast<size_t>(index) >= array.size()) {
-            return false;
-        }
-
-        *outValue = array[index];
-        return true;
-    }
-
-    VtValue const *_GetPrimvar(TfToken const &name) const
-    {
-        auto const it = _primvarMap.find(name);
-        return it == _primvarMap.end() ? nullptr : &it->second;
-    }
-
-    void _ApplyTranslations(
-        VtIntArray const &indices,
-        VtMatrix4dArray *transforms) const
-    {
-        VtValue const *value = _GetPrimvar(HdInstancerTokens->instanceTranslations);
-        if (!value) {
-            return;
-        }
-
-        for (size_t i = 0; i < indices.size(); ++i) {
-            GfVec3f translate;
-            if (_SampleArray<VtVec3fArray>(*value, indices[i], &translate)) {
-                GfMatrix4d matrix(1);
-                matrix.SetTranslate(GfVec3d(translate));
-                (*transforms)[i] = matrix * (*transforms)[i];
-            }
-        }
-    }
-
-    void _ApplyRotations(
-        VtIntArray const &indices,
-        VtMatrix4dArray *transforms) const
-    {
-        VtValue const *value = _GetPrimvar(HdInstancerTokens->instanceRotations);
-        if (!value) {
-            return;
-        }
-
-        for (size_t i = 0; i < indices.size(); ++i) {
-            GfVec4f quat;
-            if (_SampleArray<VtVec4fArray>(*value, indices[i], &quat)) {
-                GfMatrix4d matrix(1);
-                matrix.SetRotate(GfQuatd(
-                    quat[0], quat[1], quat[2], quat[3]));
-                (*transforms)[i] = matrix * (*transforms)[i];
-            }
-        }
-    }
-
-    void _ApplyScales(
-        VtIntArray const &indices,
-        VtMatrix4dArray *transforms) const
-    {
-        VtValue const *value = _GetPrimvar(HdInstancerTokens->instanceScales);
-        if (!value) {
-            return;
-        }
-
-        for (size_t i = 0; i < indices.size(); ++i) {
-            GfVec3f scale;
-            if (_SampleArray<VtVec3fArray>(*value, indices[i], &scale)) {
-                GfMatrix4d matrix(1);
-                matrix.SetScale(GfVec3d(scale));
-                (*transforms)[i] = matrix * (*transforms)[i];
-            }
-        }
-    }
-
-    void _ApplyTransforms(
-        VtIntArray const &indices,
-        VtMatrix4dArray *transforms) const
-    {
-        VtValue const *value = _GetPrimvar(HdInstancerTokens->instanceTransforms);
-        if (!value) {
-            return;
-        }
-
-        for (size_t i = 0; i < indices.size(); ++i) {
-            GfMatrix4d matrix;
-            if (_SampleArray<VtMatrix4dArray>(*value, indices[i], &matrix)) {
-                (*transforms)[i] = matrix * (*transforms)[i];
-            }
-        }
-    }
-};
+#include "webInstancer.h"
+using Emscripten_Instancer = HdNeedleInstancer;
 
 #include "webStroke.h"
 #include "webVolume.h"
@@ -496,12 +302,7 @@ public:
      , _reprGeomStyle(HdMeshGeomStyleInvalid)
      , _displayStyleFlatShadingEnabled(false)
     {
-      const std::string typeName = typeId.GetString();
-      const std::string path = id.GetAsString();
-      runInMainThread([this, typeName, path]() {
-        _rPrim.AssignFromMainThread(_renderDelegateInterface->call<val>(
-            "createRPrim", typeName, path));
-      });
+
     }
 
     virtual ~Emscripten_Rprim() {
@@ -534,6 +335,28 @@ public:
                       HdDirtyBits     *dirtyBits,
                       TfToken const   &reprToken) override
     {
+        if (!_meshInitialized && !_patch) {
+            const VtValue geometry = delegate->Get(GetId(), TfToken("needle:geometry"));
+            if (geometry.IsHolding<VtDictionary>()) {
+                const auto& data = geometry.UncheckedGet<VtDictionary>();
+                const auto type = data.find("type");
+                if (type != data.end() && type->second == VtValue(std::string("nurbsPatch")))
+                    _patch.reset(new Emscripten_Stroke(HdPrimTypeTokens->nurbsPatch,
+                        GetId(), _renderDelegateInterface));
+            }
+            if (!_patch) {
+                const std::string typeName = _typeId.GetString(), path = GetId().GetString();
+                runInMainThread([this, typeName, path]() {
+                    _rPrim.AssignFromMainThread(_renderDelegateInterface->call<val>(
+                        "createRPrim", typeName, path));
+                });
+                _meshInitialized = true;
+            }
+        }
+        if (_patch) {
+            _patch->Sync(delegate, renderParam, dirtyBits, reprToken);
+            return;
+        }
         // Get the id of this mesh. This is used to get various resources associated with it.
         SdfPath const& id = GetId();
         const bool reprFlatShadingEnabled = _GetReprFlatShadingEnabled(reprToken);
@@ -843,6 +666,8 @@ private:
     emscripten::val *_renderDelegateInterface;
     WebRenderDelegate const *_renderDelegate;
     MainThreadJsVal _rPrim;
+    bool _meshInitialized = false;
+    std::unique_ptr<Emscripten_Stroke> _patch;
     HdMeshUtil *_meshUtil;
 
     VtVec3iArray _triangulatedIndices;
@@ -2460,11 +2285,9 @@ private:
 
 class Emscripten_Material final : public HdMaterial {
 public:
-    Emscripten_Material(SdfPath const& id, emscripten::val *renderDelegateInterface,
-                        WebRenderDelegate *renderDelegate) :
+    Emscripten_Material(SdfPath const& id, emscripten::val *renderDelegateInterface) :
       HdMaterial(id)
      , _renderDelegateInterface(renderDelegateInterface)
-     , _renderDelegate(renderDelegate)
     {
       const std::string path = id.GetAsString();
       runInMainThread([this, path]() {
@@ -2475,7 +2298,6 @@ public:
 
     virtual ~Emscripten_Material() override {
       _limitSurfaceMaterialState.erase(GetId());
-      _renderDelegate->ForgetMdlMaterial(GetId());
     }
 
     virtual void Sync(HdSceneDelegate *sceneDelegate,
@@ -2488,72 +2310,28 @@ public:
         return;
       }
 
-      // The Hydra material builder needs Sdr definitions. MDL source assets
-      // generally have none in this runtime, so preserve authored values before
-      // requesting the conventional material network.
-      _renderDelegate->ForgetMdlMaterial(GetId());
-      const VtDictionary mdlMaterial = HdEmscriptenGetMdlMaterial(
-          _renderDelegate->GetStage(), GetId(),
-          _renderDelegate->GetTime(),
-          _renderDelegate->GetMaterialRenderContexts());
-      if (!mdlMaterial.empty()) {
-          const UsdShadeMaterial material(_renderDelegate->GetStage()->GetPrimAtPath(GetId()));
-          const auto shader = material.ComputeSurfaceSource(_renderDelegate->GetMaterialRenderContexts());
-          _renderDelegate->TrackMdlMaterial(GetId(),
-              UsdImagingIsHdMaterialNetworkTimeVarying(shader.GetPrim()));
-          _limitSurfaceMaterialState[GetId()] = false;
-          _sPrim.With([&](val &sPrim) {
-              sPrim.call<val>("beginMaterialSync");
-              const val callback = sPrim["updateMdlMaterial"];
-              if (!callback.isUndefined() && !callback.isNull()) {
-                  sPrim.call<val>("updateMdlMaterial",
-                                 _VtValueToJsVal(VtValue(mdlMaterial)));
-              }
-              sPrim.call<val>("updateFinished", std::string("surface"),
-                             val::array());
-          });
+      const VtValue resource = sceneDelegate->GetMaterialResource(GetId());
+      if (!resource.IsHolding<HdMaterialNetworkMap>()) {
           *dirtyBits = HdMaterial::Clean;
           return;
       }
-
-      HdMaterialNetworkMap hdNetworkMap;
-      bool builtPreferredPreview = false;
-      const UsdShadeMaterial usdMaterial(_renderDelegate->GetStage()
-          ? _renderDelegate->GetStage()->GetPrimAtPath(GetId()) : UsdPrim());
-      if (usdMaterial) {
-          TfTokenVector contexts = _renderDelegate->GetMaterialRenderContexts();
-          const auto preview = HdEmscriptenGetPreferredPreviewSurface(usdMaterial, contexts);
-          const auto selected = usdMaterial.ComputeSurfaceSource(contexts);
-          if (preview && selected && preview.GetPath() != selected.GetPath()) {
-              _renderDelegate->TrackMdlMaterial(GetId(),
-                  UsdImagingIsHdMaterialNetworkTimeVarying(preview.GetPrim()));
-              contexts.erase(std::remove(contexts.begin(), contexts.end(), TfToken("mdl")), contexts.end());
-              const UsdTimeCode time = _renderDelegate->GetTime();
-              ArResolverContextBinder binder(_renderDelegate->GetStage()->GetPathResolverContext());
-              UsdImagingBuildHdMaterialNetworkFromTerminal(
-                  preview.GetPrim(), HdMaterialTerminalTokens->surface,
-                  _renderDelegate->GetShaderSourceTypes(), contexts, &hdNetworkMap, time);
-              if (const auto displacement = usdMaterial.ComputeDisplacementSource(contexts)) {
-                  UsdImagingBuildHdMaterialNetworkFromTerminal(
-                      displacement.GetPrim(), HdMaterialTerminalTokens->displacement,
-                      _renderDelegate->GetShaderSourceTypes(), contexts, &hdNetworkMap, time);
-              }
-              // Match UsdImagingMaterialAdapter's config metadata extraction
-              // without asking it to build the unsupported MDL network first.
-              hdNetworkMap.config = HdEmscriptenGetMaterialConfig(usdMaterial);
-              builtPreferredPreview = true;
-          }
-      }
-      if (!builtPreferredPreview) {
-          _HdEmscriptenScopedTimer resourceTimer(
-              std::string("Emscripten_Material::GetMaterialResource ") +
-              GetId().GetString());
-          const VtValue vtMat = sceneDelegate->GetMaterialResource(GetId());
-          if (!vtMat.IsHolding<HdMaterialNetworkMap>()) {
+      const auto& hdNetworkMap = resource.UncheckedGet<HdMaterialNetworkMap>();
+      const auto surface = hdNetworkMap.map.find(HdMaterialTerminalTokens->surface);
+      if (surface != hdNetworkMap.map.end() && !surface->second.nodes.empty()) {
+          const auto& terminal = surface->second.nodes.back();
+          const auto document = terminal.parameters.find(TfToken("document"));
+          if (terminal.identifier == TfToken("needle:MdlSurface") &&
+              document != terminal.parameters.end() && document->second.IsHolding<VtDictionary>()) {
+              _limitSurfaceMaterialState[GetId()] = false;
+              _sPrim.With([&](val& sPrim) {
+                  sPrim.call<val>("beginMaterialSync");
+                  if (_HasJsMethod(sPrim, "updateMdlMaterial"))
+                      sPrim.call<val>("updateMdlMaterial", _VtValueToJsVal(document->second));
+                  sPrim.call<val>("updateFinished", std::string("surface"), val::array());
+              });
               *dirtyBits = HdMaterial::Clean;
               return;
           }
-          hdNetworkMap = vtMat.UncheckedGet<HdMaterialNetworkMap>();
       }
       _limitSurfaceMaterialState[GetId()] =
           _HasLimitSurfaceEvaluation(hdNetworkMap.config);
@@ -2623,7 +2401,6 @@ public:
 
 private:
     emscripten::val *_renderDelegateInterface;
-    WebRenderDelegate *_renderDelegate;
     MainThreadJsVal _sPrim;
 
 #if HD_EMSCRIPTEN_HAS_MATERIALX
@@ -3047,13 +2824,9 @@ HdRprim *
 WebRenderDelegate::CreateRprim(TfToken const& typeId,
                                     SdfPath const& rprimId)
 {
-    if (typeId == HdPrimTypeTokens->mesh && GetStage() &&
-        UsdGeomNurbsPatch(GetStage()->GetPrimAtPath(rprimId))) {
-        return new Emscripten_Stroke(HdPrimTypeTokens->nurbsPatch, rprimId, &_renderDelegateInterface, this);
-    }
     if (typeId == HdPrimTypeTokens->volume) return new Emscripten_Volume(rprimId, &_renderDelegateInterface);
     if (typeId == HdPrimTypeTokens->points || typeId == HdPrimTypeTokens->basisCurves) {
-        return new Emscripten_Stroke(typeId, rprimId, &_renderDelegateInterface, this);
+        return new Emscripten_Stroke(typeId, rprimId, &_renderDelegateInterface);
     }
     if (typeId == HdPrimTypeTokens->particleField) {
         return new Emscripten_ParticleField(
@@ -3082,7 +2855,7 @@ WebRenderDelegate::CreateSprim(TfToken const& typeId,
     if (typeId == HdPrimTypeTokens->camera) {
         return new Emscripten_Camera(sprimId, &_renderDelegateInterface);
     } else if (typeId == HdPrimTypeTokens->material) {
-        return new Emscripten_Material(sprimId, &_renderDelegateInterface, this);
+        return new Emscripten_Material(sprimId, &_renderDelegateInterface);
     } else if (typeId == HdPrimTypeTokens->domeLight ||
                typeId == HdPrimTypeTokens->cylinderLight ||
                typeId == HdPrimTypeTokens->diskLight ||
@@ -3105,7 +2878,7 @@ WebRenderDelegate::CreateFallbackSprim(TfToken const& typeId)
     if (typeId == HdPrimTypeTokens->camera) {
         return new Emscripten_Camera(SdfPath::EmptyPath(), &_renderDelegateInterface);
     } else if (typeId == HdPrimTypeTokens->material) {
-        return new Emscripten_Material(SdfPath::EmptyPath(), &_renderDelegateInterface, this);
+        return new Emscripten_Material(SdfPath::EmptyPath(), &_renderDelegateInterface);
     } else if (typeId == HdPrimTypeTokens->domeLight ||
                typeId == HdPrimTypeTokens->cylinderLight ||
                typeId == HdPrimTypeTokens->diskLight ||
