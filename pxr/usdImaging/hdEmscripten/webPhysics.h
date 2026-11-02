@@ -3,6 +3,7 @@
 
 #include "pxr/base/js/json.h"
 #include "pxr/base/js/value.h"
+#include <sstream>
 #include "pxr/imaging/hd/meshTopology.h"
 #include "pxr/imaging/hd/meshUtil.h"
 #include "pxr/usd/usd/primRange.h"
@@ -50,7 +51,8 @@ inline const char* Dof(UsdPhysicsJointDOF dof) {
 
 class Exporter {
 public:
-    explicit Exporter(const UsdStageRefPtr& stage) : stage(stage) {}
+    explicit Exporter(const UsdStageRefPtr& stage, bool meshGeometry = true) : stage(stage), meshGeometry(meshGeometry) {}
+    const bool meshGeometry;
     JsArray scenes, bodies, shapes, joints, materials, groups, unsupported;
     std::set<SdfPath> reportedShapes;
     const UsdStageRefPtr stage;
@@ -116,6 +118,7 @@ public:
     void Add(const UsdPhysicsPlaneShapeDesc& d) { auto out = Shape(d,"plane"); out["axis"] = Axis(d.axis); shapes.emplace_back(out); }
     void Add(const UsdPhysicsMeshShapeDesc& d) {
         auto out = Shape(d,"mesh"); out["approximation"] = JsValue(d.approximation.GetString()); out["meshScale"] = Vector(d.meshScale);
+        if (!meshGeometry) { shapes.emplace_back(out); return; }
         const UsdGeomMesh mesh(stage->GetPrimAtPath(d.primPath));
         VtVec3fArray points; VtIntArray counts, indices, holes; TfToken orientation;
         if (!mesh || !mesh.GetPointsAttr().Get(&points) || !mesh.GetFaceVertexCountsAttr().Get(&counts) || !mesh.GetFaceVertexIndicesAttr().Get(&indices)) {
@@ -178,9 +181,9 @@ public:
     }
 };
 
-inline std::string SceneJson(const UsdStageRefPtr& stage) {
+inline std::string SceneJson(const UsdStageRefPtr& stage, bool meshGeometry = true) {
     if (!stage) return "{}";
-    Exporter out(stage);
+    Exporter out(stage, meshGeometry);
     const bool success=UsdPhysicsLoadStageFromPrimRange(stage,{SdfPath::AbsoluteRootPath()},
         [&out](UsdPhysicsObjectType type, TfSpan<const SdfPath> paths, TfSpan<const UsdPhysicsObjectDesc> descs, const VtValue&) { out.Report(type,paths,descs); },VtValue());
     if (!success) out.Unsupported(SdfPath::AbsoluteRootPath(),"stage","OpenUSD physics parsing failed");
@@ -190,10 +193,30 @@ inline std::string SceneJson(const UsdStageRefPtr& stage) {
         bool reported=false; for (const auto& issue : out.unsupported) if (issue.GetJsObject().at("path").GetString()==prim.GetPath().GetString()) reported=true;
         if (!reported) out.Unsupported(prim.GetPath(),prim.GetTypeName().GetString(),"Collision geometry was not recognized by the OpenUSD physics parser");
     }
-    return JsWriteToString(JsValue(JsObject{{"metersPerUnit",Number(UsdGeomGetStageMetersPerUnit(stage))},
+    const JsValue result(JsObject{{"metersPerUnit",Number(UsdGeomGetStageMetersPerUnit(stage))},
         {"kilogramsPerUnit",Number(UsdPhysicsGetStageKilogramsPerUnit(stage))}, {"upAxis",JsValue(UsdGeomGetStageUpAxis(stage).GetString())},
         {"scenes",JsValue(out.scenes)}, {"bodies",JsValue(out.bodies)}, {"shapes",JsValue(out.shapes)}, {"joints",JsValue(out.joints)},
-        {"materials",JsValue(out.materials)}, {"groups",JsValue(out.groups)}, {"unsupported",JsValue(out.unsupported)}}));
+        {"materials",JsValue(out.materials)}, {"groups",JsValue(out.groups)}, {"unsupported",JsValue(out.unsupported)}});
+    std::ostringstream stream; { JsWriter writer(stream); JsWriteValue(&writer, result); }
+    return stream.str();
+}
+inline emscripten::val MeshBuffers(const UsdStageRefPtr& stage, const std::string& path) {
+    const UsdGeomMesh mesh(stage->GetPrimAtPath(SdfPath(path)));
+    VtVec3fArray points; VtIntArray counts, indices, holes; TfToken orientation;
+    if (!mesh || !mesh.GetPointsAttr().Get(&points) || !mesh.GetFaceVertexCountsAttr().Get(&counts) || !mesh.GetFaceVertexIndicesAttr().Get(&indices))
+        throw std::runtime_error("Missing mesh collision topology: " + path);
+    size_t indexCount = 0;
+    for (int count : counts) { if (count < 3) throw std::runtime_error("Degenerate mesh collision face: " + path); indexCount += count; }
+    if (indexCount != indices.size()) throw std::runtime_error("Inconsistent mesh collision topology: " + path);
+    for (int i : indices) if (i < 0 || size_t(i) >= points.size()) throw std::runtime_error("Mesh collision index out of range: " + path);
+    for (const auto& point : points) if (!Finite(point)) throw std::runtime_error("Non-finite mesh point: " + path);
+    mesh.GetHoleIndicesAttr().Get(&holes); mesh.GetOrientationAttr().Get(&orientation);
+    HdMeshTopology topology(TfToken("none"), orientation, counts, indices, holes);
+    VtVec3iArray triangles; VtIntArray params; HdMeshUtil(&topology,SdfPath(path)).ComputeTriangleIndices(&triangles,&params);
+    auto result = emscripten::val::object();
+    result.set("points", emscripten::val(emscripten::typed_memory_view(points.size()*3, reinterpret_cast<const float*>(points.cdata()))).call<emscripten::val>("slice"));
+    result.set("indices", emscripten::val(emscripten::typed_memory_view(triangles.size()*3, reinterpret_cast<const int*>(triangles.cdata()))).call<emscripten::val>("slice"));
+    return result;
 }
 } // namespace HdWebPhysics
 PXR_NAMESPACE_CLOSE_SCOPE
