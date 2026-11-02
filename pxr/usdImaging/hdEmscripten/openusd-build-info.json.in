@@ -8,7 +8,7 @@
   },
   "toolchain": {
     "emscripten": "@PXR_HD_EMSCRIPTEN_EMSCRIPTEN_VERSION@",
-    "cxxCompiler": "@CMAKE_CXX_COMPILER@",
+    "cxxCompiler": "@HD_EMSCRIPTEN_CXX_COMPILER_NAME@",
     "cmakeBuildType": "@CMAKE_BUILD_TYPE@",
     "asyncRuntime": "@PXR_EMSCRIPTEN_RUNTIME@"
   },
@@ -26,12 +26,10 @@
       "version": "@OPENSUBDIV_VERSION@"
     },
     "materialX": {
-      "prefix": "@MaterialX_DIR@",
       "gitSha": "@PXR_HD_EMSCRIPTEN_MATERIALX_REPO_SHA@",
       "gitDirty": @HD_EMSCRIPTEN_MATERIALX_REPO_DIRTY@
     },
     "usdGltf": {
-      "prefix": "@PXR_HD_EMSCRIPTEN_GLTF_PLUGIN_PREFIX@",
       "gitSha": "@PXR_HD_EMSCRIPTEN_GLTF_PLUGIN_REPO_SHA@",
       "gitDirty": @HD_EMSCRIPTEN_GLTF_PLUGIN_REPO_DIRTY@,
       "draco": @HD_EMSCRIPTEN_ENABLE_GLTF_DRACO@

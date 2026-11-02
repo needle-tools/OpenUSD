@@ -127,6 +127,7 @@ endif()
 if(NOT DEFINED HD_EMSCRIPTEN_EMSDK_DIRTY)
     set(HD_EMSCRIPTEN_EMSDK_DIRTY "false")
 endif()
+get_filename_component(HD_EMSCRIPTEN_CXX_COMPILER_NAME "${CMAKE_CXX_COMPILER}" NAME)
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/openusd-build-info.json.in"
     "${HD_EMSCRIPTEN_BUILD_INFO_JSON_FILE}"
