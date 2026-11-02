@@ -538,6 +538,14 @@ public:
         return HdWebPhysics::SceneJson(_stage);
     }
 
+    std::string GetPhysicsSceneMetadataJson() const {
+        return HdWebPhysics::SceneJson(_stage, false);
+    }
+
+    emscripten::val GetPhysicsMeshBuffers(const std::string& path) const {
+        return HdWebPhysics::MeshBuffers(_stage, path);
+    }
+
     int GetStageUpAxis() const {
         if (!_stage) {
             return 'y';

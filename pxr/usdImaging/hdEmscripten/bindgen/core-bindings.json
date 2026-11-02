@@ -25,6 +25,7 @@
       "jsName": "Attribute",
       "tsName": "USDAttribute",
       "methods": [
+        {"jsName": "GetValuePage", "tsArgs": [{"name": "timeCode", "type": "number"}, {"name": "offset", "type": "number"}, {"name": "limit", "type": "number"}], "tsReturn": "{ value: unknown; total: number | null; offset: number }", "tsMayAsync": true, "op": "direct", "cpp": "emscripten::optional_override([](pxr::UsdAttribute const& attr, double timeCode, unsigned offset, unsigned limit) { pxr::VtValue value; attr.Get(&value, pxr::UsdTimeCode(timeCode)); auto result = emscripten::val::object(); result.set(\"value\", pxr::hdEmscriptenValues::_VtValueToJsVal(value, false, offset, limit)); result.set(\"total\", value.IsArrayValued() ? emscripten::val(static_cast<double>(value.GetArraySize())) : emscripten::val::null()); result.set(\"offset\", offset); return result; })"},
         { "jsName": "IsValid", "tsReturn": "boolean", "op": "boolOperator" },
         { "jsName": "GetName", "tsReturn": "string", "op": "tokenString", "cpp": "GetName" },
         { "jsName": "GetPath", "tsReturn": "string", "op": "pathString", "cpp": "GetPath" },

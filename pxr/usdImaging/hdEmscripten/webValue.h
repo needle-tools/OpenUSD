@@ -35,9 +35,11 @@
 #include "pxr/base/gf/quath.h"
 #include "pxr/usd/sdf/timeCode.h"
 #include <emscripten/val.h>
+#include <limits>
+#include <algorithm>
 namespace pxr { namespace hdEmscriptenValues {
 using namespace PXR_NS;
-inline emscripten::val _VtValueToJsVal(VtValue const &value, bool stringifyUnsupported = false);
+inline emscripten::val _VtValueToJsVal(VtValue const &value, bool stringifyUnsupported = false, size_t offset = 0, size_t limit = std::numeric_limits<size_t>::max());
 template <class Vec>
 inline emscripten::val _GfVecToJsVal(Vec const &vec)
 {
@@ -138,16 +140,18 @@ inline emscripten::val _ValueToJsVal(GfQuath const& value) {
 }
 
 template <class T>
-inline emscripten::val _VtArrayToJsVal(VtArray<T> const &array)
+inline emscripten::val _VtArrayToJsVal(VtArray<T> const &array, size_t offset = 0, size_t limit = std::numeric_limits<size_t>::max())
 {
     emscripten::val jsArray = emscripten::val::array();
-    for (size_t i = 0; i < array.size(); ++i) {
-        jsArray.set(i, _ValueToJsVal(array[i]));
+    const size_t start = std::min(offset, array.size());
+    const size_t count = std::min(limit, array.size() - start);
+    for (size_t i = 0; i < count; ++i) {
+        jsArray.set(i, _ValueToJsVal(array[start + i]));
     }
     return jsArray;
 }
 
-inline emscripten::val _VtValueToJsVal(VtValue const &value, bool stringifyUnsupported)
+inline emscripten::val _VtValueToJsVal(VtValue const &value, bool stringifyUnsupported, size_t offset, size_t limit)
 {
     if (value.IsEmpty()) return emscripten::val::undefined();
     if (value.IsHolding<VtDictionary>()) {
@@ -169,7 +173,7 @@ inline emscripten::val _VtValueToJsVal(VtValue const &value, bool stringifyUnsup
 
 #define HD_EMSCRIPTEN_CONVERT_ARRAY(T) \
     if (value.IsHolding<VtArray<T>>()) { \
-        return _VtArrayToJsVal(value.UncheckedGet<VtArray<T>>()); \
+        return _VtArrayToJsVal(value.UncheckedGet<VtArray<T>>(), offset, limit); \
     }
 
     HD_EMSCRIPTEN_CONVERT_SCALAR(int64_t)
