@@ -1602,7 +1602,12 @@ private:
                 "updateIndices",
                 val(typed_memory_view(
                     3 * _triangulatedIndices.size(),
-                    reinterpret_cast<int32_t*>(_triangulatedIndices.data()))));
+                    reinterpret_cast<int32_t*>(_triangulatedIndices.data()))),
+                // Keep authored face identity through triangulation/refinement.
+                // Consumers copy this transient view only when topology changes.
+                val(typed_memory_view(
+                    _trianglePrimitiveParams.size(),
+                    _trianglePrimitiveParams.data())));
         });
     }
 
