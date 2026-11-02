@@ -23,6 +23,7 @@
 #include "httpResolver/resolver.h"
 
 #include "webRenderDelegate.h"
+#include "webImagingDelegate.h"
 #include "webPhysics.h"
 #include "webStageExport.h"
 #include "pxr/imaging/hd/unitTestNullRenderPass.h"
@@ -205,10 +206,8 @@ public:
 
     ~HdWebSyncDriver()
     {
-        TfNotice::Revoke(_materialsNoticeKey);
         delete _delegate;
         delete _renderIndex;
-        _renderDelegate.SetStage(UsdStageRefPtr());
         _stage.Reset();
         // USD may retain resolver contexts in its layer caches. Closing this
         // driver's private scope releases files immediately without touching
@@ -223,29 +222,12 @@ public:
         if (!_stage || !_delegate || !_geometryPass) {
             return;
         }
-        // Hydra may pass a scene-index adapter, not our UsdImagingDelegate,
-        // to material Sync. Carry the actual draw time explicitly across it.
-        _renderDelegate.SetTime(_delegate->GetTime());
         {
             _HdEmscriptenSyncTimer updatesTimer(
                 "UsdImagingDelegate::ApplyPendingUpdates");
             _delegate->ApplyPendingUpdates();
         }
         _renderDelegate.UpdateVolumeDependencies(_renderIndex);
-        // The legacy adapter does not track NodeGraph interface edits, and
-        // follows MDL variability even when we choose its paired PreviewSurface.
-        // Refresh only affected classes of MDL materials; ordinary MaterialX
-        // and PreviewSurface materials retain Hydra's normal variability path.
-        const bool materialEdits = _mdlMaterialsDirty.exchange(false);
-        const bool timeChanged = _mdlTimeDirty.exchange(false);
-        if (materialEdits || timeChanged) {
-            for (const auto &entry : _renderDelegate.GetMdlMaterials()) {
-                if (materialEdits || (timeChanged && entry.second)) {
-                    _renderIndex->GetChangeTracker().MarkSprimDirty(
-                        entry.first, HdMaterial::DirtyResource);
-                }
-            }
-        }
         HdTaskSharedPtrVector tasks = {
             std::make_shared<WebSyncTask>(_geometryPass, _renderTags)
         };
@@ -504,7 +486,6 @@ public:
             return;
         }
         _delegate->SetTime(time);
-        _mdlTimeDirty.store(true);
     }
 
     double GetTime() {
@@ -590,31 +571,10 @@ public:
     }
 
 private:
-    void _OnMaterialObjectsChanged(UsdNotice::ObjectsChanged const &notice,
-                                   UsdStageWeakPtr const &)
-    {
-        if (!notice.GetResyncedPaths().empty()) {
-            _mdlMaterialsDirty.store(true);
-            return;
-        }
-        for (const auto &path : notice.GetChangedInfoOnlyPaths()) {
-            const std::string name = path.GetName();
-            if (name.compare(0, 7, "inputs:") == 0 ||
-                name.compare(0, 8, "outputs:") == 0 ||
-                name.compare(0, 5, "info:") == 0) {
-                _mdlMaterialsDirty.store(true);
-                return;
-            }
-        }
-    }
-
-    TfNotice::Key _materialsNoticeKey;
-    std::atomic<bool> _mdlMaterialsDirty{false};
-    std::atomic<bool> _mdlTimeDirty{false};
     HdEngine _engine;
     WebRenderDelegate _renderDelegate;
     HdRenderIndex       *_renderIndex;
-    UsdImagingDelegate  *_delegate;
+    WebImagingDelegate  *_delegate;
     HdRenderPassSharedPtr _geometryPass;
     UsdStageRefPtr _stage;
     std::shared_ptr<HttpResolverCacheScope> _httpCache;
@@ -704,7 +664,7 @@ private:
                TfTokenVector const &renderTags) {
         _renderIndex = HdRenderIndex::New(&_renderDelegate, HdDriverVector());
         TF_VERIFY(_renderIndex != nullptr);
-        _delegate = new UsdImagingDelegate(_renderIndex, delegateId);
+        _delegate = new WebImagingDelegate(_renderIndex, delegateId, usdStage);
         _delegate->SetRefineLevelFallback(_GetRefineLevel(_complexity));
 
         _stage = usdStage;
@@ -713,11 +673,7 @@ private:
             return;
         }
 
-        _renderDelegate.SetStage(_stage);
         UsdSkelBakeSkinning(_stage->Traverse());
-        TfNotice::Revoke(_materialsNoticeKey);
-        _materialsNoticeKey = TfNotice::Register(
-            TfCreateWeakPtr(this), &HdWebSyncDriver::_OnMaterialObjectsChanged, _stage);
         _delegate->Populate(_stage->GetPseudoRoot());
 
         _geometryPass = HdRenderPassSharedPtr(
