@@ -7,6 +7,9 @@ interchange between graphics applications.
 
 For more details, please visit the web site [here](http://openusd.org).
 
+For Needle's maintained wasm imaging branch and the Three.js Hydra integration,
+see [Needle web and native Hydra](NEEDLE_NATIVE_HYDRA.md).
+
 Build Status
 ------------
 
