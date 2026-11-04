@@ -53,7 +53,7 @@ class Exporter {
 public:
     explicit Exporter(const UsdStageRefPtr& stage, bool meshGeometry = true) : stage(stage), meshGeometry(meshGeometry) {}
     const bool meshGeometry;
-    JsArray scenes, bodies, shapes, joints, materials, groups, unsupported;
+    JsArray scenes, bodies, shapes, joints, materials, groups, articulations, unsupported;
     std::set<SdfPath> reportedShapes;
     const UsdStageRefPtr stage;
 
@@ -88,6 +88,7 @@ public:
         out["position0"] = Vector(d.localPose0Position); out["position1"] = Vector(d.localPose1Position);
         out["rotation0"] = Quaternion(d.localPose0Orientation); out["rotation1"] = Quaternion(d.localPose1Orientation);
         out["jointEnabled"] = JsValue(d.jointEnabled); out["collisionEnabled"] = JsValue(d.collisionEnabled);
+        out["excludeFromArticulation"] = JsValue(d.excludeFromArticulation);
         out["breakForce"] = Number(d.breakForce); out["breakTorque"] = Number(d.breakTorque); return out;
     }
     void Add(const UsdPhysicsSceneDesc& d) {
@@ -136,6 +137,14 @@ public:
         for (const auto& triangle : triangles) for (int c=0;c<3;c++) indexValues.emplace_back(triangle[c]);
         out["points"] = JsValue(pointValues); out["indices"] = JsValue(indexValues); shapes.emplace_back(out);
     }
+    void Add(const UsdPhysicsArticulationDesc& d) {
+        auto out = Object(d);
+        out["rootPrims"] = Paths(d.rootPrims);
+        out["filteredCollisions"] = Paths(d.filteredCollisions);
+        out["articulatedJoints"] = Paths(d.articulatedJoints);
+        out["articulatedBodies"] = Paths(d.articulatedBodies);
+        articulations.emplace_back(out);
+    }
     void Add(const UsdPhysicsFixedJointDesc& d) { joints.emplace_back(Joint(d,"fixed")); }
     template<class T> void AxialJoint(const T& d, const char* type) {
         auto out=Joint(d,type); out["axis"]=Axis(d.axis); out["limit"]=Limit(d.limit); out["drive"]=Drive(d.drive); joints.emplace_back(out);
@@ -163,7 +172,7 @@ public:
         }
     }
     // Unsupported overloads permit the same typed batch dispatch without
-    // pretending tapered shapes, sphere clouds or articulations are supported.
+    // pretending unrecognized collision geometry or custom joints were extracted.
     template<class T> void Add(const T&) {}
     void Report(UsdPhysicsObjectType type, TfSpan<const SdfPath> paths, TfSpan<const UsdPhysicsObjectDesc> span) {
 #define HD_WEB_PHYSICS_CASE(Name, Supported) case UsdPhysicsObjectType::Name: Batch<UsdPhysics##Name##Desc>(paths,span,#Name,Supported); break
@@ -174,7 +183,7 @@ public:
         HD_WEB_PHYSICS_CASE(FixedJoint,true); HD_WEB_PHYSICS_CASE(RevoluteJoint,true); HD_WEB_PHYSICS_CASE(PrismaticJoint,true);
         HD_WEB_PHYSICS_CASE(SphericalJoint,true); HD_WEB_PHYSICS_CASE(DistanceJoint,true); HD_WEB_PHYSICS_CASE(D6Joint,true);
         HD_WEB_PHYSICS_CASE(Capsule1Shape,false); HD_WEB_PHYSICS_CASE(Cylinder1Shape,false); HD_WEB_PHYSICS_CASE(CustomShape,false);
-        HD_WEB_PHYSICS_CASE(SpherePointsShape,false); HD_WEB_PHYSICS_CASE(CustomJoint,false); HD_WEB_PHYSICS_CASE(Articulation,false);
+        HD_WEB_PHYSICS_CASE(SpherePointsShape,false); HD_WEB_PHYSICS_CASE(CustomJoint,false); HD_WEB_PHYSICS_CASE(Articulation,true);
         default: for (const auto& path : paths) Unsupported(path,std::to_string(int(type)),"Unknown physics descriptor type");
         }
 #undef HD_WEB_PHYSICS_CASE
@@ -196,7 +205,7 @@ inline std::string SceneJson(const UsdStageRefPtr& stage, bool meshGeometry = tr
     const JsValue result(JsObject{{"metersPerUnit",Number(UsdGeomGetStageMetersPerUnit(stage))},
         {"kilogramsPerUnit",Number(UsdPhysicsGetStageKilogramsPerUnit(stage))}, {"upAxis",JsValue(UsdGeomGetStageUpAxis(stage).GetString())},
         {"scenes",JsValue(out.scenes)}, {"bodies",JsValue(out.bodies)}, {"shapes",JsValue(out.shapes)}, {"joints",JsValue(out.joints)},
-        {"materials",JsValue(out.materials)}, {"groups",JsValue(out.groups)}, {"unsupported",JsValue(out.unsupported)}});
+        {"materials",JsValue(out.materials)}, {"groups",JsValue(out.groups)}, {"articulations",JsValue(out.articulations)}, {"unsupported",JsValue(out.unsupported)}});
     std::ostringstream stream; { JsWriter writer(stream); JsWriteValue(&writer, result); }
     return stream.str();
 }
