@@ -19,6 +19,12 @@ fi
 rm -rf "${ONETBB_SRC_PARENT}" "${ONETBB_BUILD_DIR}"
 mkdir -p "${ONETBB_SRC_PARENT}"
 unzip -q "${ONETBB_ZIP}" -d "${ONETBB_SRC_PARENT}"
+# oneTBB hardcodes Emscripten's JavaScript exceptions; use the runtime's model instead.
+if [[ -n "${WASM_EXCEPTION_FLAGS}" ]]; then
+  perl -pi -e 's/set\(TBB_COMMON_COMPILE_FLAGS \$\{TBB_COMMON_COMPILE_FLAGS\} -fexceptions\)/set(TBB_COMMON_COMPILE_FLAGS \${TBB_COMMON_COMPILE_FLAGS} '"${WASM_EXCEPTION_FLAGS}"')/' \
+    "${ONETBB_SRC_PARENT}/oneTBB-2021.12.0/cmake/compilers/Clang.cmake"
+  grep -q -- "${WASM_EXCEPTION_FLAGS}" "${ONETBB_SRC_PARENT}/oneTBB-2021.12.0/cmake/compilers/Clang.cmake"
+fi
 
 emcmake cmake \
   -S "${ONETBB_SRC_PARENT}/oneTBB-2021.12.0" \
