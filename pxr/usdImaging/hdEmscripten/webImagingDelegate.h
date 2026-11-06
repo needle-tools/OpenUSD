@@ -4,6 +4,8 @@
 #include "pxr/usdImaging/usdImaging/delegate.h"
 #include "pxr/usdImaging/usdImaging/materialParamUtils.h"
 #include "pxr/usd/usd/notice.h"
+#include "pxr/usd/usd/colorSpaceAPI.h"
+#include "pxr/usd/usdShade/shader.h"
 #include "pxr/usd/usdGeom/nurbsCurves.h"
 #include "pxr/usd/usdGeom/nurbsPatch.h"
 #include "pxr/imaging/hd/material.h"
@@ -65,6 +67,16 @@ public:
     }
 
     VtValue GetMaterialResource(SdfPath const& id) override {
+        VtValue resource = _GetMaterialResource(id);
+        if (resource.IsHolding<HdMaterialNetworkMap>()) {
+            HdMaterialNetworkMap network = resource.UncheckedRemove<HdMaterialNetworkMap>();
+            _AddInheritedColorSpaces(&network);
+            return VtValue(network);
+        }
+        return resource;
+    }
+
+    VtValue _GetMaterialResource(SdfPath const& id) {
         const SdfPath path = ConvertIndexPathToCachePath(id);
         const UsdShadeMaterial material(_stage->GetPrimAtPath(path));
         if (!material) return UsdImagingDelegate::GetMaterialResource(id);
@@ -129,6 +141,49 @@ public:
     }
 
 private:
+    // UsdImagingDelegate's material networks carry a parameter's color space only when
+    // the attribute itself has colorSpace metadata (usdImaging/materialParamUtils.cpp).
+    // The scene-index path, which Storm uses, also resolves UsdColorSpaceAPI on the
+    // enclosing prims. Add those inherited color spaces as 'colorSpace:<input>' so
+    // HdMtlx and the JS material bridge see the same color spaces as Storm. Only
+    // explicitly applied color spaces are added: without one, a texture keeps the
+    // UsdUVTexture "auto" rule instead of the fallback lin_rec709_scene.
+    void _AddInheritedColorSpaces(HdMaterialNetworkMap* network) const {
+        static const TfToken colorSpacePrefix("colorSpace:");
+        for (auto& entry : network->map) {
+            for (HdMaterialNode& node : entry.second.nodes) {
+                const UsdShadeShader shader(_stage->GetPrimAtPath(node.path));
+                if (!shader) continue;
+                std::vector<std::pair<TfToken, VtValue>> added;
+                for (auto const& parameter : node.parameters) {
+                    const std::string& name = parameter.first.GetString();
+                    if (name.find(':') != std::string::npos) continue;
+                    const TfToken key(colorSpacePrefix.GetString() + name);
+                    if (node.parameters.count(key)) continue;
+                    const UsdShadeInput input = shader.GetInput(parameter.first);
+                    if (!input) continue;
+                    const UsdAttribute attr = input.GetAttr();
+                    if (attr.HasColorSpace()) continue;
+                    if (attr.GetRoleName() != SdfValueRoleNames->Color &&
+                        attr.GetTypeName() != SdfValueTypeNames->Asset) continue;
+                    const TfToken colorSpace = _ApplyingColorSpace(attr.GetPrim());
+                    if (!colorSpace.IsEmpty()) added.emplace_back(key, VtValue(colorSpace));
+                }
+                for (auto const& value : added) node.parameters[value.first] = value.second;
+            }
+        }
+    }
+
+    static TfToken _ApplyingColorSpace(UsdPrim prim) {
+        for (; prim; prim = prim.GetParent()) {
+            if (!prim.HasAPI<UsdColorSpaceAPI>()) continue;
+            TfToken name;
+            if (UsdColorSpaceAPI(prim).GetColorSpaceNameAttr().Get(&name) && !name.IsEmpty())
+                return name;
+        }
+        return TfToken();
+    }
+
     struct NurbsSource { SdfPath path; bool varying; };
     UsdStageRefPtr _stage;
     TfNotice::Key _notice;
