@@ -43,7 +43,7 @@ OPENUSD_WASM_HYDRA_BUILD_DIR="${OPENUSD_WASM_HYDRA_BUILD_DIR:-/Users/herbst/Open
 OPENUSD_WASM_HYDRA_PREFIX="${OPENUSD_WASM_HYDRA_PREFIX:-/Users/herbst/OpenUSD-26.11-wasm-hydra-exp}"
 OPENUSD_WASM_HYDRA_MTLX_BUILD_DIR="${OPENUSD_WASM_HYDRA_MTLX_BUILD_DIR:-/Users/herbst/OpenUSD-26.11-wasm-hydra-mtlx${WASM_RUNTIME_SUFFIX}-build}"
 OPENUSD_WASM_HYDRA_MTLX_PREFIX="${OPENUSD_WASM_HYDRA_MTLX_PREFIX:-/Users/herbst/OpenUSD-26.11-wasm-hydra-mtlx${WASM_RUNTIME_SUFFIX}}"
-# Pinned dependency sources (see README_BUILDING.md in usd-viewer for their provenance).
+# Pinned dependency sources; versions and provenance: team wiki, usd-viewer.md, "OpenUSD Wasm Build".
 WASM_SOURCES_DIR="${WASM_SOURCES_DIR:-/Users/herbst/OpenUSD-wasm-sources}"
 ONETBB_ZIP="${ONETBB_ZIP:-${WASM_SOURCES_DIR}/oneTBB-v2021.12.0.zip}"
 OPENSUBDIV_ZIP="${OPENSUBDIV_ZIP:-${WASM_SOURCES_DIR}/OpenSubdiv-v3_6_1.zip}"
