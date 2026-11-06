@@ -21,7 +21,7 @@ echo "== ${WASM_RUNTIME}: MaterialX" && "${SCRIPT_DIR}/build-wasm-materialx-open
 echo "== ${WASM_RUNTIME}: OpenUSD without the glTF and Draco plugins"
 rm -rf "${OPENUSD_WASM_HYDRA_MTLX_BUILD_DIR}" "${OPENUSD_WASM_HYDRA_MTLX_PREFIX}" "${ADOBE_PLUGIN_WASM_PREFIX}" "${ADOBE_PLUGIN_WASM_PREFIX}-build"
 ENABLE_GLTF_PLUGIN=0 ENABLE_DRACO_PLUGIN=0 "${SCRIPT_DIR}/configure-wasm-hydra-materialx.sh"
-"${SCRIPT_DIR}/build-wasm-hydra-materialx.sh"
+SKIP_NODE_SMOKE=1 "${SCRIPT_DIR}/build-wasm-hydra-materialx.sh"
 echo "== ${WASM_RUNTIME}: Adobe usdGltf" && "${SCRIPT_DIR}/build-wasm-adobe-gltf-plugin.sh"
 echo "== ${WASM_RUNTIME}: OpenUSD with the glTF and Draco plugins"
 "${SCRIPT_DIR}/configure-wasm-hydra-materialx.sh"
