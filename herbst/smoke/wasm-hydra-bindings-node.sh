@@ -28,7 +28,8 @@ getUsdModule({
       console.error(text);
     }
   },
-}).then((USD) => {
+}).then(async (USD) => {
+  // Bindings marked tsMayAsync return promises under JSPI; await is harmless under Asyncify.
   const api = {
     HdWebSyncDriver: typeof USD.HdWebSyncDriver,
     CreateStage: typeof USD.CreateStage,
@@ -102,14 +103,14 @@ getUsdModule({
     if (!rotation.Set([[1,0,0,0]], Number.NaN)) throw new Error(type + " authoring failed");
   }
   const weights = root.CreateAttribute("primvars:weights", "float[]", false);
-  if (!weights.SetMetadata("interpolation", "vertex") || !weights.SetMetadata("elementSize", 3))
+  if (!(await weights.SetMetadata("interpolation", "vertex")) || !(await weights.SetMetadata("elementSize", 3)))
     throw new Error("Primvar metadata authoring failed");
   stage.DefinePrim("/Prototype", "Scope");
   stage.DefinePrim("/Prototype/Part", "Cube");
   const copy = stage.DefinePrim("/World/Instance", "Xform");
-  if (!copy.AddReference("", "/Prototype") || !copy.SetInstanceable(true) || !copy.IsInstance())
+  if (!(await copy.AddReference("", "/Prototype")) || !(await copy.SetInstanceable(true)) || !copy.IsInstance())
     throw new Error("Reference/instance authoring failed");
-  stage.GetRootLayer().SetSubLayerPaths([]);
+  (await stage.GetRootLayer().SetSubLayerPaths([]));
   if (stage.GetRootLayer().GetSubLayerPaths().length) throw new Error("Sublayer edit failed");
 
   const color = root.CreateAttribute("primvars:displayColor", "color3f", true);
@@ -122,17 +123,17 @@ getUsdModule({
     throw new Error("SetFloat time samples failed");
   }
 
-  if (!root.AddVariant("lod", "low") || !root.DefinePrimInVariant("lod", "high", "/World/HighGeom", "Scope").IsValid()) {
+  if (!root.AddVariant("lod", "low") || !(await root.DefinePrimInVariant("lod", "high", "/World/HighGeom", "Scope")).IsValid()) {
     throw new Error("Variant authoring failed");
   }
-  if (!root.SetVariantSelection("lod", "high") || root.GetVariantSelection("lod") !== "high") {
+  if (!(await root.SetVariantSelection("lod", "high")) || root.GetVariantSelection("lod") !== "high") {
     throw new Error("Variant selection failed");
   }
 
-  if (!stage.Export(usdPath) || !USD.FS_analyzePath(usdPath).exists) {
+  if (!(await stage.Export(usdPath)) || !USD.FS_analyzePath(usdPath).exists) {
     throw new Error("Stage export failed");
   }
-  if (!USD.CreateUsdzPackage(usdPath, usdzPath)) {
+  if (!(await USD.CreateUsdzPackage(usdPath, usdzPath))) {
     throw new Error("USDZ package creation failed");
   }
 
@@ -141,7 +142,7 @@ getUsdModule({
     throw new Error("USDZ bytes are not a valid zip payload");
   }
 
-  const reopened = USD.OpenStage(usdPath);
+  const reopened = (await USD.OpenStage(usdPath));
   const reopenedRoot = reopened.GetPrimAtPath("/World");
   if (!reopenedRoot.IsValid() || reopenedRoot.GetVariantSelection("lod") !== "high") {
     throw new Error("Reopened stage did not preserve variant selection");
@@ -149,7 +150,7 @@ getUsdModule({
   if (!reopened.GetPrimAtPath("/World/HighGeom").IsValid()) {
     throw new Error("Reopened stage did not compose selected variant contents");
   }
-  if (reopenedRoot.GetAttribute("userProperties:spin").GetValueStringAtTime(24) !== "90") {
+  if ((await reopenedRoot.GetAttribute("userProperties:spin").GetValueStringAtTime(24)) !== "90") {
     throw new Error("Reopened stage did not preserve animated sample");
   }
 
