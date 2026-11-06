@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=env.sh
 source "${SCRIPT_DIR}/env.sh"
 
-MODULE_PATH="${OPENUSD_WASM_HYDRA_PREFIX}/bin/emHdBindings.js"
+MODULE_PATH="${OPENUSD_WASM_HYDRA_PREFIX}/bin/${WASM_BINDINGS_NAME}.js"
 
 if [[ ! -f "${MODULE_PATH}" ]]; then
   echo "Missing Hydra binding module: ${MODULE_PATH}" >&2
@@ -13,8 +13,8 @@ if [[ ! -f "${MODULE_PATH}" ]]; then
   exit 1
 fi
 
-OPENUSD_WASM_HYDRA_PREFIX="${OPENUSD_WASM_HYDRA_PREFIX}" node - <<'NODE'
-const path = `${process.env.OPENUSD_WASM_HYDRA_PREFIX}/bin/emHdBindings.js`;
+OPENUSD_WASM_HYDRA_PREFIX="${OPENUSD_WASM_HYDRA_PREFIX}" WASM_BINDINGS_NAME="${WASM_BINDINGS_NAME}" node - <<'NODE'
+const path = `${process.env.OPENUSD_WASM_HYDRA_PREFIX}/bin/${process.env.WASM_BINDINGS_NAME}.js`;
 const getUsdModule = require(path);
 
 getUsdModule({
