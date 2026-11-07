@@ -26,6 +26,7 @@
       "version": "@OPENSUBDIV_VERSION@"
     },
     "materialX": {
+      "version": "@MaterialX_VERSION@",
       "gitSha": "@PXR_HD_EMSCRIPTEN_MATERIALX_REPO_SHA@",
       "gitDirty": @HD_EMSCRIPTEN_MATERIALX_REPO_DIRTY@
     },
