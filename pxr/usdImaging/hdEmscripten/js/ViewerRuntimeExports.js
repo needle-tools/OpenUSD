@@ -20,20 +20,13 @@ Module["ready"] = Promise.resolve(Module);
     };
 }
 
-// Embind constructors cannot be async, so `new HdWebSyncDriver` returns the
-// Promise of CreateHdWebSyncDriver. The alias keeps the native prototype, so
-// instanceof and prototype extensions still work.
+// HydraDriver instances come only from CreateHydraDriver. Embind exports
+// every registered class; remove this one so the module has no constructor
+// that cannot work. Instances keep their prototype.
 {
     const previousOnRuntimeInitialized = Module["onRuntimeInitialized"];
     Module["onRuntimeInitialized"] = function () {
-        const NativeDriver = Module["HdWebSyncDriver"];
-        function HdWebSyncDriver(delegate, file) {
-            if (!new.target) throw new TypeError("Use new HdWebSyncDriver or CreateHdWebSyncDriver");
-            return Module["CreateHdWebSyncDriver"](delegate, file);
-        }
-        Object.setPrototypeOf(HdWebSyncDriver, NativeDriver);
-        HdWebSyncDriver.prototype = NativeDriver.prototype;
-        Module["HdWebSyncDriver"] = HdWebSyncDriver;
+        delete Module["HydraDriver"];
         previousOnRuntimeInitialized?.call(Module);
     };
 }

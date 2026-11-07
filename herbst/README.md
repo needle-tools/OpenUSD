@@ -99,8 +99,8 @@ Modern Emscripten does not emit a separate `emHdBindings.worker.js` sidecar for 
 
 The Node smoke test verifies:
 
-- `HdWebSyncDriver`
-- `HdWebSyncDriver.GetStage()` and basic `Stage`/`Prim`/`Layer` APIs
+- `CreateHydraDriver`
+- basic `Stage`/`Prim`/`Layer` APIs
 - generated stage authoring APIs (`CreateStage`, `OpenStage`, `ReleaseStage`)
 - generated prim, attribute, variant, and time-sample authoring APIs
 - USDZ package creation and byte readback for browser download handoff

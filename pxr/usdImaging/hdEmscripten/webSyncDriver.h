@@ -215,8 +215,6 @@ public:
         if (_httpCache) _httpCache->Release();
     }
 
-    bool HasScopedHttpCache() const { return true; }
-
     void Draw() {
         _HdEmscriptenSyncTimer timer("HdWebSyncDriver::Draw");
         if (!_stage || !_delegate || !_geometryPass) {

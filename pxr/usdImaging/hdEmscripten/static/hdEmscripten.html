@@ -42,9 +42,9 @@
       Usd.FS_createDataFile('/', inputFile, new Uint8Array(usdFile), true, true, true);
 
       let renderInterface = new RenderDelegateInterface(inputFile);
-      let driver = window.driver = new Usd.HdWebSyncDriver(renderInterface, inputFile);
+      let driver = window.driver = await Usd.CreateHydraDriver(renderInterface, inputFile);
 
-      driver.Draw();
+      await driver.Draw();
 
       const stage = window.driver.GetStage();
       const endTimeCode = stage.GetEndTimeCode();
@@ -120,7 +120,7 @@
       await new Promise(resolve => setTimeout(resolve, 10));
       const time = secs * (1000 / timeout) % endTimecode;
       window.driver.SetTime(time);
-      driver.Draw();
+      await window.driver.Draw();
 
       render();
 

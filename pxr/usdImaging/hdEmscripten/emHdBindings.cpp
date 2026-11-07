@@ -114,9 +114,11 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
     return std::string(kHdEmscriptenOpenUsdBuildInfoJson);
   }));
 
-  // Embind constructors cannot be marked async in Emscripten. A named
-  // factory allows JSPI to suspend while opening remote composition arcs.
-  function("CreateHdWebSyncDriver", optional_override([](
+  // Drivers are created only through this factory: opening a stage can
+  // suspend while it loads remote composition arcs, which Embind
+  // constructors cannot do. The JS class is not exported (see
+  // js/ViewerRuntimeExports.js).
+  function("CreateHydraDriver", optional_override([](
       emscripten::val delegate, const std::string& file) {
     auto stage = pxr::WebRunComposition([file]() {
       auto* resolver = dynamic_cast<pxr::HttpResolver*>(&pxr::ArGetUnderlyingResolver());
@@ -127,8 +129,7 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
     return new pxr::HdWebSyncDriver(delegate, stage);
   }), allow_raw_pointers(), return_value_policy::take_ownership(), async());
 
-  class_<pxr::HdWebSyncDriver>("HdWebSyncDriver")
-    .constructor<emscripten::val, std::string>()
+  class_<pxr::HdWebSyncDriver>("HydraDriver")
     .function("Draw", &pxr::HdWebSyncDriver::Draw, async())
     .function("DrawAsync", &pxr::HdWebSyncDriver::DrawAsync)
     .function("ExportUsdzAsync", &pxr::HdWebSyncDriver::ExportUsdzAsync)
@@ -144,7 +145,6 @@ EMSCRIPTEN_BINDINGS(test_usd_imaging_emscripten) {
     .function("SetAdaptiveSubdivision", &pxr::HdWebSyncDriver::SetAdaptiveSubdivision)
     .function("getFile", &pxr::HdWebSyncDriver::getFile, async())
     .function("resolveAssetUrl", &pxr::HdWebSyncDriver::resolveAssetUrl)
-    .function("HasScopedHttpCache", &pxr::HdWebSyncDriver::HasScopedHttpCache)
     .function("HasStage", &pxr::HdWebSyncDriver::HasStage)
     // Resolve only the hit instance, not an O(instance count) JS mirror. Hydra's
     // scene delegate owns native/point/nested instancer index ordering.

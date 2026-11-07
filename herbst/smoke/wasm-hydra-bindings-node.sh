@@ -29,9 +29,9 @@ getUsdModule({
     }
   },
 }).then(async (USD) => {
-  // Bindings marked tsMayAsync return promises under JSPI; await is harmless under Asyncify.
+  // Bindings marked tsMayAsync return promises in both runtimes.
   const api = {
-    HdWebSyncDriver: typeof USD.HdWebSyncDriver,
+    CreateHydraDriver: typeof USD.CreateHydraDriver,
     CreateStage: typeof USD.CreateStage,
     OpenStage: typeof USD.OpenStage,
     ReleaseStage: typeof USD.ReleaseStage,
