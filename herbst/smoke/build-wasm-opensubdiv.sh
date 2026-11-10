@@ -7,9 +7,9 @@ source "${SCRIPT_DIR}/env.sh"
 
 activate_emsdk
 
-OPENSUBDIV_SRC_PARENT="${OPENSUBDIV_SRC_PARENT:-/Users/herbst/OpenSubdiv-3_6_1-wasm${WASM_RUNTIME_SUFFIX}-src}"
+OPENSUBDIV_SRC_PARENT="${OPENSUBDIV_SRC_PARENT:-${HOME}/OpenSubdiv-3_6_1-wasm${WASM_RUNTIME_SUFFIX}-src}"
 OPENSUBDIV_SRC_DIR="${OPENSUBDIV_SRC_DIR:-}"
-OPENSUBDIV_BUILD_DIR="${OPENSUBDIV_BUILD_DIR:-/Users/herbst/OpenSubdiv-3_6_1-wasm${WASM_RUNTIME_SUFFIX}-build}"
+OPENSUBDIV_BUILD_DIR="${OPENSUBDIV_BUILD_DIR:-${HOME}/OpenSubdiv-3_6_1-wasm${WASM_RUNTIME_SUFFIX}-build}"
 
 if [[ -n "${OPENSUBDIV_SRC_DIR}" ]]; then
   if [[ ! -f "${OPENSUBDIV_SRC_DIR}/CMakeLists.txt" ]]; then

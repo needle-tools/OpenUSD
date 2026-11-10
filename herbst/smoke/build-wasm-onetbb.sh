@@ -8,8 +8,8 @@ source "${SCRIPT_DIR}/env.sh"
 
 activate_emsdk
 
-ONETBB_SRC_PARENT="${ONETBB_SRC_PARENT:-/Users/herbst/oneTBB-2021.12.0-wasm${WASM_RUNTIME_SUFFIX}-src}"
-ONETBB_BUILD_DIR="${ONETBB_BUILD_DIR:-/Users/herbst/oneTBB-2021.12.0-wasm${WASM_RUNTIME_SUFFIX}-build}"
+ONETBB_SRC_PARENT="${ONETBB_SRC_PARENT:-${HOME}/oneTBB-2021.12.0-wasm${WASM_RUNTIME_SUFFIX}-src}"
+ONETBB_BUILD_DIR="${ONETBB_BUILD_DIR:-${HOME}/oneTBB-2021.12.0-wasm${WASM_RUNTIME_SUFFIX}-build}"
 
 if [[ ! -f "${ONETBB_ZIP}" ]]; then
   echo "Missing oneTBB source zip: ${ONETBB_ZIP}" >&2

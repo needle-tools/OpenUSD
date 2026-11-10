@@ -3,7 +3,11 @@ set(PXR_PACKAGE usdMtlx)
 
 set(MATERIALX_STDLIB_RESOURCES "")
 if (MATERIALX_STDLIB_DIR)
-    add_definitions(-DPXR_MATERIALX_STDLIB_DIR="${MATERIALX_STDLIB_DIR}")
+    # WebAssembly uses the plugin's packaged libraries in its virtual filesystem.
+    # The host directory is only needed below to collect those resources.
+    if (NOT EMSCRIPTEN)
+        add_definitions(-DPXR_MATERIALX_STDLIB_DIR="${MATERIALX_STDLIB_DIR}")
+    endif()
 
     # We copy the MaterialX standard library files out of the MaterialX 
     # build as a fallback in case the MaterialX standard library directory 
